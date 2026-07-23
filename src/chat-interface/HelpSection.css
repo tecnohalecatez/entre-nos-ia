@@ -1,0 +1,23 @@
+.help-section {
+  padding: 1rem;
+  max-width: 40rem;
+}
+
+.help-section h2 {
+  font-size: 1rem;
+  margin: 1rem 0 0.5rem;
+}
+
+.help-section h2:first-child {
+  margin-top: 0;
+}
+
+.help-section p {
+  margin: 0 0 0.5rem;
+  line-height: 1.4;
+}
+
+.help-section ul {
+  margin: 0;
+  padding-left: 1.25rem;
+}

@@ -1,0 +1,50 @@
+.message-history {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+
+.message-history--empty {
+  align-items: center;
+  justify-content: center;
+}
+
+.message-history__empty-state {
+  color: var(--text);
+  text-align: center;
+}
+
+.message-history__message {
+  max-width: min(80%, 640px);
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.message-history__message--user {
+  align-self: flex-end;
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+}
+
+.message-history__message--assistant {
+  align-self: flex-start;
+}
+
+.message-history__message--generating {
+  opacity: 0.85;
+}
+
+.message-history__message--cancelled {
+  opacity: 0.7;
+}
+
+.message-history__content {
+  margin: 0;
+  white-space: pre-wrap;
+  color: var(--text-h);
+}

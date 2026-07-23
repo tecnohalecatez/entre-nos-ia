@@ -1,0 +1,117 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ChatInterface — responsive design (10.1, 10.2, 10.3) > DOM structure snapshot of the assembled layout (structural regression) 1`] = `
+<div
+  class="chat-interface"
+>
+  <header
+    class="chat-interface__header"
+  >
+    <span
+      class="chat-interface__brand"
+    >
+      <span
+        aria-hidden="true"
+        class="chat-interface__brand-icon"
+      >
+        ✨
+      </span>
+      Entre Nos IA
+    </span>
+    <div
+      class="chat-interface__indicators"
+    >
+      <span
+        aria-label="Mecanismo de inferencia activo"
+        class="active-engine-indicator"
+      >
+        WebGPU
+      </span>
+    </div>
+    <button
+      aria-expanded="false"
+      class="chat-interface__help-button button button--ghost button--sm"
+      type="button"
+    >
+      Ayuda
+    </button>
+  </header>
+  <div
+    class="chat-interface__body"
+  >
+    <aside
+      class="chat-interface__conversation-list"
+    >
+      <nav
+        aria-label="Conversaciones"
+      >
+        <button
+          type="button"
+        >
+          Nueva conversación
+        </button>
+        <button
+          type="button"
+        >
+          Importar conversación
+        </button>
+        <input
+          accept="application/json"
+          aria-label="Importar conversación desde archivo"
+          style="display: none;"
+          type="file"
+        />
+        <p
+          data-testid="conversation-list-empty"
+        >
+          No tienes conversaciones guardadas
+        </p>
+      </nav>
+    </aside>
+    <main
+      class="chat-interface__main"
+    >
+      <section
+        aria-label="Historial de mensajes"
+        class="message-history message-history--empty"
+      >
+        <p
+          class="message-history__empty-state"
+        >
+          Seleccioná o creá una conversación para comenzar.
+        </p>
+      </section>
+      <form
+        class="message-input"
+      >
+        <label
+          class="message-input__label"
+          for="message-input-field"
+        >
+          Mensaje
+        </label>
+        <textarea
+          aria-invalid="false"
+          class="message-input__field"
+          id="message-input-field"
+        />
+        <div
+          class="message-input__status-message"
+          id=":r0:"
+          role="status"
+        />
+        <div
+          class="message-input__actions"
+        >
+          <button
+            disabled=""
+            type="submit"
+          >
+            Enviar
+          </button>
+        </div>
+      </form>
+    </main>
+  </div>
+</div>
+`;
