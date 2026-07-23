@@ -73,8 +73,21 @@ describe("InferenceEngineWebLLM.initialize", () => {
     });
   });
 
-  it("rejects with EngineInitializationError(cause='other_cause') on a generic memory-unrelated error (Requisito 8.5)", async () => {
-    const originalError = new Error("network error");
+  it("rejects with EngineInitializationError(cause='network_error') on a fetch failure (Requisito 8.5)", async () => {
+    const originalError = new Error("Failed to fetch");
+    const engineFactory: MlcEngineFactory = vi.fn().mockRejectedValue(originalError);
+    const inferenceEngine = new InferenceEngineWebLLM("test-model", engineFactory);
+
+    await expect(inferenceEngine.initialize("webgpu")).rejects.toSatisfy((error: unknown) => {
+      expect(error).toBeInstanceOf(EngineInitializationError);
+      expect((error as EngineInitializationError).cause).toBe("network_error");
+      expect((error as EngineInitializationError).originalCause).toBe(originalError);
+      return true;
+    });
+  });
+
+  it("rejects with EngineInitializationError(cause='other_cause') on a generic unclassifiable error (Requisito 8.5)", async () => {
+    const originalError = new Error("unexpected worker crash");
     const engineFactory: MlcEngineFactory = vi.fn().mockRejectedValue(originalError);
     const inferenceEngine = new InferenceEngineWebLLM("test-model", engineFactory);
 
@@ -174,8 +187,18 @@ describe("classifyInitializationError", () => {
     expect(classifyInitializationError(new Error(message))).toBe("insufficient_memory");
   });
 
-  it("classifies a generic memory-unrelated Error as other_cause", () => {
-    expect(classifyInitializationError(new Error("network error"))).toBe("other_cause");
+  it.each([
+    "Failed to fetch",
+    "NetworkError when attempting to fetch resource",
+    "net::ERR_BLOCKED_BY_CLIENT",
+    "net::ERR_CONNECTION_RESET",
+    "net::ERR_INTERNET_DISCONNECTED",
+  ])("classifies the message %j as network_error", (message) => {
+    expect(classifyInitializationError(new Error(message))).toBe("network_error");
+  });
+
+  it("classifies a generic error unrelated to memory or network as other_cause", () => {
+    expect(classifyInitializationError(new Error("unexpected worker crash"))).toBe("other_cause");
   });
 
   it("classifies a non-Error value as other_cause", () => {

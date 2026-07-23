@@ -47,6 +47,7 @@ import { reduceGeneration } from "../inference-engine/reduceGeneration";
 import type { GenerationState } from "../inference-engine/reduceGeneration";
 import { ConversationManager } from "../conversation-manager/ConversationManager";
 import { ConversationStoreDexie } from "../conversation-store/ConversationStore";
+import { ModelDownloadError } from "../model-download-manager/ensureModelAvailable";
 import type { ModelDownloadManager } from "../model-download-manager/ensureModelAvailable";
 import type { Conversation, Message } from "../types/models";
 import { useNotification } from "../notification/useNotification";
@@ -243,6 +244,16 @@ export function AppStateProvider({
           if (isCancelled(controller.signal)) {
             return;
           }
+          // Logged locally only (never transmitted, see Requirement 6) so
+          // the real cause is diagnosable instead of only surfacing the
+          // generic degraded-mode message. `error.cause` is only the coarse
+          // classification (e.g. "aborted"); the actually wrapped exception
+          // lives in `originalCause` and is logged separately so it's
+          // visible without manually expanding the error object.
+          console.error("[AppState] Model download failed:", error);
+          if (error instanceof ModelDownloadError) {
+            console.error("[AppState] Underlying cause:", error.originalCause);
+          }
           if (!isBrowserOnline()) {
             activateDegradedMode({ type: "no_connection_initial_load" });
             setLoading(false);
@@ -267,6 +278,16 @@ export function AppStateProvider({
       } catch (error) {
         if (isCancelled(controller.signal)) {
           return;
+        }
+        // Logged locally only (never transmitted, see Requirement 6) so the
+        // real cause is diagnosable instead of only surfacing the generic
+        // degraded-mode message. `error.cause` is only the coarse
+        // classification (e.g. "other_cause"); the actually wrapped
+        // exception lives in `originalCause` and is logged separately so
+        // it's visible without manually expanding the error object.
+        console.error("[AppState] Inference engine initialization failed:", error);
+        if (error instanceof EngineInitializationError) {
+          console.error("[AppState] Underlying cause:", error.originalCause);
         }
         // 3.5: if the browser is offline and WebLLM couldn't
         // download/cache the weights, report the specific

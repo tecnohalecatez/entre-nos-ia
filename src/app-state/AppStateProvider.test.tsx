@@ -118,7 +118,7 @@ describe("AppStateProvider - Degraded_Mode activation", () => {
     await waitFor(() => {
       expect(screen.getByTestId("degraded-mode").textContent).not.toBe("null");
     });
-    expect(screen.getByTestId("degraded-mode").textContent).toContain("webgpu, wasm");
+    expect(screen.getByTestId("degraded-mode").textContent).toContain("WebGPU, WebAssembly");
     expect(screen.getByTestId("loading").textContent).toBe("false");
   });
 
@@ -129,7 +129,7 @@ describe("AppStateProvider - Degraded_Mode activation", () => {
         wasmAvailable: true,
         memoryGB: 2,
         selectedEngine: "none",
-        missingCapabilities: ["memoria"],
+        missingCapabilities: ["memory"],
       }),
     );
 
@@ -138,7 +138,7 @@ describe("AppStateProvider - Degraded_Mode activation", () => {
     await waitFor(() => {
       expect(screen.getByTestId("degraded-mode").textContent).not.toBe("null");
     });
-    expect(screen.getByTestId("degraded-mode").textContent).toContain("memoria");
+    expect(screen.getByTestId("degraded-mode").textContent).toContain("memoria suficiente");
   });
 
   it("does NOT activate Degraded_Mode and marks engineReady when compatible and initialization succeeds", async () => {
@@ -205,7 +205,7 @@ describe("AppStateProvider - Degraded_Mode activation", () => {
     await waitFor(() => {
       expect(screen.getByTestId("degraded-mode").textContent).not.toBe("null");
     });
-    expect(screen.getByTestId("degraded-mode").textContent).toBe(
+    expect(screen.getByTestId("degraded-mode").textContent).toContain(
       "El asistente no pudo inicializarse.",
     );
   });
@@ -229,9 +229,33 @@ describe("AppStateProvider - Degraded_Mode activation", () => {
     await waitFor(() => {
       expect(screen.getByTestId("degraded-mode").textContent).not.toBe("null");
     });
-    expect(screen.getByTestId("degraded-mode").textContent).toBe(
+    expect(screen.getByTestId("degraded-mode").textContent).toContain(
       "El asistente no pudo inicializarse.",
     );
+  });
+
+  it("activates Degraded_Mode with cause network_error when engine initialization fails to fetch the model", async () => {
+    const decideFn = vi.fn(
+      (): CompatibilityResult => ({
+        webgpuAvailable: true,
+        wasmAvailable: false,
+        memoryGB: 8,
+        selectedEngine: "webgpu",
+        missingCapabilities: [],
+      }),
+    );
+    const { inferenceEngine } = createFakeInferenceEngine({
+      initialize: vi
+        .fn()
+        .mockRejectedValue(new EngineInitializationError("network_error", new Error("Failed to fetch"))),
+    });
+
+    renderWithProviders({ decideFn, createInferenceEngine: () => inferenceEngine });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("degraded-mode").textContent).not.toBe("null");
+    });
+    expect(screen.getByTestId("degraded-mode").textContent).toContain("No se pudo descargar el modelo de IA");
   });
 
   it("activates Degraded_Mode when ensureModelAvailable() fails definitively (8.4)", async () => {

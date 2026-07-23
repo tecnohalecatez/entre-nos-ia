@@ -64,12 +64,13 @@ export type MlcEngineFactory = (
 ) => Promise<MlcEngine>;
 
 /** Cause of an InferenceEngine initialization failure (Requisitos 8.1, 8.5). */
-export type EngineInitializationFailureCause = "insufficient_memory" | "other_cause";
+export type EngineInitializationFailureCause = "insufficient_memory" | "network_error" | "other_cause";
 
 /**
  * Typed error thrown by `initialize()` when engine loading fails, allowing
- * the caller to distinguish between insufficient memory (8.1) and any other
- * cause (8.5) without freely inspecting error messages.
+ * the caller to distinguish between insufficient memory (8.1), a network
+ * failure while fetching the model, and any other cause (8.5) without
+ * freely inspecting error messages.
  */
 export class EngineInitializationError extends Error {
   override readonly cause: EngineInitializationFailureCause;
@@ -79,7 +80,9 @@ export class EngineInitializationError extends Error {
     super(
       cause === "insufficient_memory"
         ? "Could not initialize the InferenceEngine: insufficient memory."
-        : "Could not initialize the InferenceEngine."
+        : cause === "network_error"
+          ? "Could not initialize the InferenceEngine: network error while fetching the model."
+          : "Could not initialize the InferenceEngine."
     );
     this.name = "EngineInitializationError";
     this.cause = cause;
@@ -96,6 +99,22 @@ const OOM_MESSAGE_PATTERNS: readonly RegExp[] = [
   /device was lost/i,
 ];
 
+/**
+ * Patterns matching a failed network/model-download request, e.g. the
+ * browser blocking the request (content blockers, strict privacy modes
+ * like Brave Shields), CORS issues, or plain connectivity problems.
+ */
+const NETWORK_ERROR_PATTERNS: readonly RegExp[] = [
+  /failed to fetch/i,
+  /network\s*error/i,
+  /err_blocked_by_client/i,
+  /err_connection/i,
+  /err_internet_disconnected/i,
+  /err_name_not_resolved/i,
+  /load failed/i,
+  /\bcors\b/i,
+];
+
 function extractErrorDescription(error: unknown): string {
   if (error instanceof Error) {
     return `${error.name} ${error.message}`;
@@ -104,23 +123,31 @@ function extractErrorDescription(error: unknown): string {
 }
 
 /**
- * Classifies an engine initialization error as insufficient memory (8.1) or
- * another cause (8.5).
+ * Classifies an engine initialization error as insufficient memory (8.1), a
+ * network/download failure, or another cause (8.5).
  *
  * `MLCEngine.reload()` throws a `DeviceLostError` (name `"DeviceLostError"`)
  * when the WebGPU device is lost, which, per WebLLM's own documentation,
  * happens "mostly due to OOM"; it's detected by name because that class is
  * internal to the SDK and not part of its exported public API. For any
  * other error (including WASM failures without WebGPU), the message is
- * inspected for common out-of-memory patterns.
+ * inspected first for common out-of-memory patterns, then for common
+ * network-failure patterns (the model's weight shards are fetched from a
+ * third-party CDN, so this is a frequent real-world failure mode -- e.g. a
+ * content blocker or privacy-focused browser mode blocking the request).
  */
 export function classifyInitializationError(error: unknown): EngineInitializationFailureCause {
   if (error instanceof Error && error.name === "DeviceLostError") {
     return "insufficient_memory";
   }
   const description = extractErrorDescription(error);
-  const isOOM = OOM_MESSAGE_PATTERNS.some((pattern) => pattern.test(description));
-  return isOOM ? "insufficient_memory" : "other_cause";
+  if (OOM_MESSAGE_PATTERNS.some((pattern) => pattern.test(description))) {
+    return "insufficient_memory";
+  }
+  if (NETWORK_ERROR_PATTERNS.some((pattern) => pattern.test(description))) {
+    return "network_error";
+  }
+  return "other_cause";
 }
 
 function mapRoleToOpenAi(role: MessageRole): "user" | "assistant" {
