@@ -16,6 +16,7 @@ import { downloadExportedFile } from "../conversation-exporter/downloadExportedF
 import { readImportedFile } from "../conversation-exporter/readImportedFile";
 import { lastActivityAt } from "../types/models";
 import type { Conversation } from "../types/models";
+import "./ConversationList.css";
 
 /** Text shown when there's no saved conversation (Requirement 5.4). */
 export const EMPTY_STATE_TEXT = "No tienes conversaciones guardadas";
@@ -118,31 +119,44 @@ export function ConversationList() {
   }
 
   return (
-    <nav aria-label="Conversaciones">
-      <button type="button" onClick={() => void handleCreateConversation()}>
-        Nueva conversación
-      </button>
+    <nav className="conversation-list" aria-label="Conversaciones">
+      <div className="conversation-list__actions">
+        <button
+          type="button"
+          className="button button--primary button--block"
+          onClick={() => void handleCreateConversation()}
+        >
+          Nueva conversación
+        </button>
 
-      <button type="button" onClick={handleImportClick}>
-        Importar conversación
-      </button>
-      <input
-        ref={importInputRef}
-        type="file"
-        accept="application/json"
-        aria-label="Importar conversación desde archivo"
-        style={{ display: "none" }}
-        onChange={(event) => void handleFileSelected(event)}
-      />
+        <button
+          type="button"
+          className="button button--secondary button--block"
+          onClick={handleImportClick}
+        >
+          Importar conversación
+        </button>
+        <input
+          ref={importInputRef}
+          type="file"
+          accept="application/json"
+          aria-label="Importar conversación desde archivo"
+          style={{ display: "none" }}
+          onChange={(event) => void handleFileSelected(event)}
+        />
+      </div>
 
       {conversations.length === 0 ? (
-        <p data-testid="conversation-list-empty">{EMPTY_STATE_TEXT}</p>
+        <p className="conversation-list__empty-state" data-testid="conversation-list-empty">
+          {EMPTY_STATE_TEXT}
+        </p>
       ) : (
-        <ul>
+        <ul className="conversation-list__items">
           {conversations.map((conversation) => (
-            <li key={conversation.id}>
+            <li key={conversation.id} className="conversation-list__item">
               <button
                 type="button"
+                className="conversation-list__title"
                 aria-current={conversation.id === activeConversationId}
                 onClick={() => {
                   selectConversation(conversation.id);
@@ -150,24 +164,28 @@ export function ConversationList() {
               >
                 {formatLabel(conversation)}
               </button>
-              <button
-                type="button"
-                aria-label={`Exportar conversación ${formatLabel(conversation)}`}
-                onClick={() => {
-                  handleExportConversation(conversation);
-                }}
-              >
-                Exportar
-              </button>
-              <button
-                type="button"
-                aria-label={`Eliminar conversación ${formatLabel(conversation)}`}
-                onClick={() => {
-                  void handleDeleteConversation(conversation.id);
-                }}
-              >
-                Eliminar
-              </button>
+              <div className="conversation-list__item-actions">
+                <button
+                  type="button"
+                  className="button button--ghost button--sm"
+                  aria-label={`Exportar conversación ${formatLabel(conversation)}`}
+                  onClick={() => {
+                    handleExportConversation(conversation);
+                  }}
+                >
+                  Exportar
+                </button>
+                <button
+                  type="button"
+                  className="button button--danger button--sm"
+                  aria-label={`Eliminar conversación ${formatLabel(conversation)}`}
+                  onClick={() => {
+                    void handleDeleteConversation(conversation.id);
+                  }}
+                >
+                  Eliminar
+                </button>
+              </div>
             </li>
           ))}
         </ul>

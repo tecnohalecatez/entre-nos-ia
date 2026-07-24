@@ -38,6 +38,7 @@
 
 import { useAppState } from "../app-state/useAppState";
 import type { Message } from "../types/models";
+import { Markdown } from "./Markdown";
 import "./MessageHistory.css";
 
 /** Sorts a copy of `messages` ascending by `timestamp` (5.5). */
@@ -80,7 +81,18 @@ export function MessageHistory() {
           key={message.id}
           className={`message-history__message message-history__message--${message.role}`}
         >
-          <p className="message-history__content">{message.content}</p>
+          {message.role === "assistant" ? (
+            <span className="message-history__avatar" aria-hidden="true">
+              ✨
+            </span>
+          ) : null}
+          <div className="message-history__bubble">
+            {message.role === "assistant" ? (
+              <Markdown text={message.content} />
+            ) : (
+              <p className="message-history__content">{message.content}</p>
+            )}
+          </div>
         </article>
       ))}
 
@@ -89,7 +101,12 @@ export function MessageHistory() {
           className="message-history__message message-history__message--assistant message-history__message--generating"
           aria-label="Generando respuesta"
         >
-          <p className="message-history__content">{generationState.partialText}</p>
+          <span className="message-history__avatar" aria-hidden="true">
+            ✨
+          </span>
+          <div className="message-history__bubble">
+            <Markdown text={generationState.partialText} />
+          </div>
         </article>
       ) : null}
     </section>

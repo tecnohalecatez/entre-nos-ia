@@ -44,24 +44,32 @@ exports[`ChatInterface — responsive design (10.1, 10.2, 10.3) > DOM structure 
     >
       <nav
         aria-label="Conversaciones"
+        class="conversation-list"
       >
-        <button
-          type="button"
+        <div
+          class="conversation-list__actions"
         >
-          Nueva conversación
-        </button>
-        <button
-          type="button"
-        >
-          Importar conversación
-        </button>
-        <input
-          accept="application/json"
-          aria-label="Importar conversación desde archivo"
-          style="display: none;"
-          type="file"
-        />
+          <button
+            class="button button--primary button--block"
+            type="button"
+          >
+            Nueva conversación
+          </button>
+          <button
+            class="button button--secondary button--block"
+            type="button"
+          >
+            Importar conversación
+          </button>
+          <input
+            accept="application/json"
+            aria-label="Importar conversación desde archivo"
+            style="display: none;"
+            type="file"
+          />
+        </div>
         <p
+          class="conversation-list__empty-state"
           data-testid="conversation-list-empty"
         >
           No tienes conversaciones guardadas
@@ -104,6 +112,7 @@ exports[`ChatInterface — responsive design (10.1, 10.2, 10.3) > DOM structure 
           class="message-input__actions"
         >
           <button
+            class="button button--primary"
             disabled=""
             type="submit"
           >

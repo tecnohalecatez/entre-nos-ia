@@ -28,6 +28,7 @@ import { validateMessage } from "../message-validator/validateMessage";
 import type { Message } from "../types/models";
 import type { GenerationState } from "../inference-engine/reduceGeneration";
 import type { InferenceEngine } from "../inference-engine/InferenceEngine";
+import "./MessageInput.css";
 
 export interface MessageInputProps {
   /** Current state of the generation cycle (see `reduceGeneration`). */
@@ -138,7 +139,11 @@ export function MessageInput({
         aria-describedby={showValidationError || !engineReady ? errorId : undefined}
         aria-invalid={showValidationError}
       />
-      <div id={errorId} className="message-input__status-message" role="status">
+      <div
+        id={errorId}
+        className={`message-input__status-message${showValidationError ? " message-input__status-message--error" : ""}`}
+        role="status"
+      >
         {!engineReady
           ? PREPARING_MESSAGE
           : showValidationError
@@ -146,19 +151,19 @@ export function MessageInput({
             : null}
       </div>
       <div className="message-input__actions">
-        <button type="submit" disabled={disabled}>
-          Enviar
-        </button>
         {generating ? (
-          <button type="button" onClick={handleCancel}>
+          <button type="button" className="button button--ghost" onClick={handleCancel}>
             Cancelar
           </button>
         ) : null}
         {inError ? (
-          <button type="button" onClick={handleRetry}>
+          <button type="button" className="button button--secondary" onClick={handleRetry}>
             Reintentar
           </button>
         ) : null}
+        <button type="submit" className="button button--primary" disabled={disabled}>
+          Enviar
+        </button>
       </div>
     </form>
   );
