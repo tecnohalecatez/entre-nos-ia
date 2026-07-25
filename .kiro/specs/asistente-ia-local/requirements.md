@@ -23,6 +23,7 @@ Esta funcionalidad implementa un asistente de inteligencia artificial conversaci
 - **Navegador_Compatible**: Navegador que soporta, como mínimo, WebAssembly, Service Worker, Cache API e IndexedDB, independientemente del sistema operativo o del tipo de dispositivo en el que se ejecute.
 - **Manifest_App**: Archivo de manifiesto de aplicación web (manifest.json) que declara los metadatos necesarios para que el Sistema sea instalable como aplicación web progresiva, incluyendo nombre, íconos, color de tema y modo de visualización.
 - **Modo_Standalone**: Modo de visualización en el que el Sistema se ejecuta como una aplicación independiente, sin la barra de direcciones ni otros elementos de la interfaz del navegador, tras haber sido instalado por el usuario.
+- **Pipeline_Amplify**: Componente externo (AWS Amplify Hosting) que construye el Sistema a partir del repositorio y sirve sus assets estáticos por HTTPS, sin formar parte del tiempo de ejecución de la aplicación.
 
 ## Requirements
 
@@ -175,3 +176,16 @@ Esta funcionalidad implementa un asistente de inteligencia artificial conversaci
 4. WHEN el usuario abre la aplicación previamente instalada, THE Sistema SHALL ejecutarse en Modo_Standalone conforme a lo declarado en el Manifest_App.
 5. WHILE el Sistema se ejecuta en Modo_Standalone, THE Sistema SHALL ofrecer las mismas funcionalidades descritas en los Requisitos 1 a 10 disponibles cuando se ejecuta dentro de una pestaña del navegador.
 6. IF el navegador del usuario no soporta la instalación de aplicaciones web o no emite el evento de instalación disponible, THEN THE Sistema SHALL permitir el uso completo de la Interfaz_Chat dentro del navegador sin mostrar el control de instalación.
+
+### Requisito 12: Despliegue y alojamiento en AWS Amplify Hosting
+
+**User Story:** Como responsable de publicar el Sistema, quiero que se despliegue automáticamente en AWS Amplify Hosting a partir del repositorio, para que los usuarios accedan a la última versión mediante una URL HTTPS estable sin mantener infraestructura propia.
+
+#### Criterios de Aceptación
+
+1. WHEN se hace push a la rama de despliegue configurada, THE Pipeline_Amplify SHALL ejecutar `npm run lint`, `npm run test` y `npm run build`, en ese orden, y SHALL publicar el contenido de `dist/` únicamente si los tres pasos finalizan sin errores.
+2. IF `npm run lint`, `npm run test` o `npm run build` falla, THEN THE Pipeline_Amplify SHALL abortar la publicación y SHALL mantener disponible para los usuarios la versión previamente desplegada.
+3. THE Pipeline_Amplify SHALL servir el Sistema exclusivamente sobre HTTPS, dado que Service_Worker_App, WebGPU, WebAssembly e IndexedDB requieren un contexto seguro para funcionar en el navegador.
+4. THE Pipeline_Amplify SHALL actuar únicamente como distribución de assets estáticos (HTML, CSS, JS, Manifest_App, íconos) y SHALL NOT ejecutar código de aplicación propio en tiempo de petición ni introducir ninguna llamada de red que contenga contenido de Mensaje o Conversacion, coherente con el Requisito 6.
+5. THE Pipeline_Amplify SHALL configurar el documento principal (`index.html`) y el archivo del Service_Worker_App con cabeceras que impidan su cacheo indefinido por parte de la CDN, de forma que el mecanismo de detección de actualizaciones del Requisito 9 siga funcionando tras cada despliegue.
+6. THE Sistema SHALL quedar accesible mediante una URL provista por AWS Amplify Hosting sin requerir variables de entorno con secretos ni credenciales de servicios externos en tiempo de build o de runtime, coherente con el Requisito 6.

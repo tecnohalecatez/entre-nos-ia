@@ -114,6 +114,40 @@ sequenceDiagram
     end
 ```
 
+## Despliegue
+
+El nodo `ORIGEN` del diagrama de arquitectura (sección anterior) se concreta como **AWS Amplify
+Hosting**: un servicio de build + CDN de assets estáticos, sin cómputo de backend propio. Esto
+encaja con el pilar "Cero servidor de aplicación en runtime" (ver Overview): Amplify solo
+construye (`npm run lint && npm run test && npm run build`) y sirve el contenido de `dist/`, y
+nunca recibe una petición que contenga contenido de Mensaje o Conversacion — coherente con la
+flecha punteada `UI -.->|nunca: contenido de Mensaje| ORIGEN` ya presente en el diagrama.
+
+El build spec vive en `amplify.yml` (raíz del repositorio), la fuente de verdad de este proceso
+(Requisito 12).
+
+### Cabeceras de cache
+
+El Service_Worker_App (Requisito 9) depende de que el navegador vuelva a consultar `index.html` y
+el archivo del service worker compilado (`dist/sw.js`, generado por `vite-plugin-pwa` con
+`strategies: 'injectManifest'`) para detectar una nueva versión. Si la CDN de Amplify los cachea
+de forma indefinida, ese mecanismo deja de funcionar. Por eso:
+
+| Archivo(s) | `Cache-Control` | Motivo |
+|---|---|---|
+| `index.html` | `no-cache` | Debe revalidarse en cada carga para que el navegador note un nuevo build (9.1). |
+| `sw.js` | `no-cache` | El navegador debe poder detectar una nueva versión del Service_Worker_App en cada chequeo periódico (9.1). |
+| `/assets/**` (JS/CSS con hash de contenido en el nombre, generado por Vite) | `public, max-age=31536000, immutable` | El nombre cambia si el contenido cambia, así que cachear indefinidamente es seguro y evita descargas repetidas. |
+
+### Por qué no hace falta más infraestructura
+
+- Sin variables de entorno ni secretos: `MODEL_ID` es una constante de código
+  (`src/app-state/configuration.ts`), no una credencial; WebLLM descarga los pesos del modelo
+  directamente desde el catálogo de MLC-AI en tiempo de ejecución del navegador, no en build.
+- Sin reglas de rewrite/redirect tipo SPA: la aplicación no usa React Router ni rutas del lado del
+  cliente (un único punto de entrada, `index.html`), así que no hay URLs profundas que Amplify
+  deba reescribir hacia `index.html`.
+
 ## Components and Interfaces
 
 ### Detector_Compatibilidad

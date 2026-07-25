@@ -247,6 +247,14 @@ Este plan traduce el diseño técnico (React + Vite + TypeScript, WebLLM, vite-p
 - [x] 23. Checkpoint final - Asegurar que todos los tests pasen
   - Ensure all tests pass, ask the user if questions arise.
 
+- [x] 24. Configurar despliegue en AWS Amplify Hosting
+  - [x] 24.1 Crear el build spec `amplify.yml`
+    - Fases `preBuild` (`npm ci`) y `build` (`npm run lint && npm run test && npm run build`), artifacts desde `dist/`, cache de `node_modules` entre builds
+    - _Requirements: 12.1, 12.2_
+  - [x] 24.2 Documentar las cabeceras de cache requeridas para `index.html` y el Service Worker
+    - Coordinar con el Requisito 9 (detección de actualizaciones) para que Amplify no sirva versiones cacheadas obsoletas de esos dos archivos
+    - _Requirements: 12.5_
+
 ## Notes
 
 - Las tareas marcadas con `*` son opcionales (pruebas) y pueden omitirse para un MVP más rápido; el modelo NO debe implementarlas salvo indicación explícita.
