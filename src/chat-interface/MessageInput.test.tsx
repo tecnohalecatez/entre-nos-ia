@@ -165,4 +165,59 @@ describe("MessageInput", () => {
 
     expect(screen.queryByRole("button", { name: "Reintentar" })).not.toBeInTheDocument();
   });
+
+  describe("Enter to send", () => {
+    it("sends on Enter with valid content and clears the field", async () => {
+      const user = userEvent.setup();
+      const { onSend } = renderComponent();
+
+      await user.type(getField(), "hola mundo{Enter}");
+
+      expect(onSend).toHaveBeenCalledWith("hola mundo");
+      expect(getField()).toHaveValue("");
+    });
+
+    it("does not send on Shift+Enter, and inserts a newline instead", async () => {
+      const user = userEvent.setup();
+      const { onSend } = renderComponent();
+
+      await user.type(getField(), "primera linea{Shift>}{Enter}{/Shift}segunda linea");
+
+      expect(onSend).not.toHaveBeenCalled();
+      expect(getField()).toHaveValue("primera linea\nsegunda linea");
+    });
+
+    it("does not send on Enter with only whitespace, and shows the empty-message validation (4.6)", async () => {
+      const user = userEvent.setup();
+      const { onSend } = renderComponent();
+
+      await user.type(getField(), "   {Enter}");
+
+      expect(onSend).not.toHaveBeenCalled();
+      expect(screen.getByText("El mensaje no puede estar vacío")).toBeInTheDocument();
+    });
+
+    it("does not send on Enter while the engine isn't ready (4.7)", async () => {
+      const user = userEvent.setup();
+      const { onSend } = renderComponent({ engineReady: false });
+
+      await user.type(getField(), "mensaje válido{Enter}");
+
+      expect(onSend).not.toHaveBeenCalled();
+    });
+
+    it("does not send on Enter while generating (4.4)", async () => {
+      const user = userEvent.setup();
+      const generatingState: GenerationState = {
+        type: "generating",
+        userMessage: USER_MESSAGE,
+        partialText: "",
+      };
+      const { onSend } = renderComponent({ generationState: generatingState });
+
+      await user.type(getField(), "otro mensaje{Enter}");
+
+      expect(onSend).not.toHaveBeenCalled();
+    });
+  });
 });

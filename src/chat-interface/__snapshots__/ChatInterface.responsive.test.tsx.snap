@@ -103,6 +103,11 @@ exports[`ChatInterface — responsive design (10.1, 10.2, 10.3) > DOM structure 
           class="message-input__field"
           id="message-input-field"
         />
+        <p
+          class="message-input__hint"
+        >
+          Enter para enviar · Shift+Enter para nueva línea
+        </p>
         <div
           class="message-input__status-message"
           id=":r0:"

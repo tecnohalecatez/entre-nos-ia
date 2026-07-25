@@ -10,6 +10,7 @@
 
 import type { CreateMLCEngine as CreateMLCEngineType } from "@mlc-ai/web-llm";
 import type { Message, MessageRole } from "../types/models";
+import { SYSTEM_PROMPT } from "./systemPrompt";
 
 /** Message in the role/content format expected by WebLLM's chat API (OpenAI-compatible). */
 export type OpenAiMessage =
@@ -154,11 +155,21 @@ function mapRoleToOpenAi(role: MessageRole): "user" | "assistant" {
   return role === "user" ? "user" : "assistant";
 }
 
+// The system message is injected here, in the mapping layer, and never
+// stored as part of a Conversation's history: `MessageRole`
+// (`../types/models.ts`) is `"user" | "assistant"` and cannot represent
+// `"system"`. This keeps it out of IndexedDB persistence and export/import
+// (Requisito 7), and means changing it applies retroactively to every
+// existing Conversation without a migration. It's prefixed exactly once per
+// request, as expected by Llama-3's chat template.
 function mapHistoryToOpenAi(history: Message[]): OpenAiMessage[] {
-  return history.map((message) => ({
-    role: mapRoleToOpenAi(message.role),
-    content: message.content,
-  }));
+  return [
+    { role: "system", content: SYSTEM_PROMPT },
+    ...history.map((message) => ({
+      role: mapRoleToOpenAi(message.role),
+      content: message.content,
+    })),
+  ];
 }
 
 /** Own InferenceEngine interface (see design.md, "Motor_Inferencia" section). */

@@ -223,6 +223,45 @@ describe("e2e integration - full messaging flow (4.1, 4.2, 4.3, 4.9, 5.1)", () =
   });
 });
 
+describe("e2e integration - sending a message with Enter", () => {
+  it("pressing Enter on the real textarea sends the message, exactly like clicking Enviar", async () => {
+    const inferenceEngine = createStreamingInferenceEngine(["Hola", ", ", "mundo"]);
+
+    renderTestApp({
+      detectFn: vi.fn().mockResolvedValue(ANY_PROBE),
+      decideFn: vi.fn().mockReturnValue(WEBGPU_RESULT),
+      createInferenceEngine: () => inferenceEngine,
+      createConversationManager: createTestConversationManager,
+      modelDownloadManager: createTestModelDownloadManager(),
+    });
+
+    await waitForBootToFinish();
+
+    const user = userEvent.setup();
+    const field = screen.getByRole("textbox", { name: "Mensaje" });
+    await user.type(field, "hola mundo{Enter}");
+
+    // Confirms generation actually started (Enter really triggered onSend)
+    // before checking it finished, mirroring `typeAndSend`'s assertions.
+    await waitFor(() => {
+      expect(screen.getByRole("article", { name: "Generando respuesta" })).toHaveTextContent("Hola");
+    });
+
+    await waitFor(
+      () => {
+        expect(screen.queryByRole("article", { name: "Generando respuesta" })).not.toBeInTheDocument();
+      },
+      { timeout: 3000 },
+    );
+
+    const history = screen.getByRole("log", { name: "Historial de mensajes" });
+    expect(within(history).getByText("hola mundo")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(within(history).getByText("Hola, mundo")).toBeInTheDocument();
+    });
+  });
+});
+
 describe("e2e integration - generation error and retry (8.2)", () => {
   it("shows the error state after a generation failure and persists the response on retry", async () => {
     let attemptNumber = 0;

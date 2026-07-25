@@ -13,6 +13,7 @@ import {
   type MlcResponseChunk,
   type MlcEngine,
 } from "./InferenceEngine";
+import { SYSTEM_PROMPT } from "./systemPrompt";
 
 function createMessage(role: Message["role"], content: string, timestamp = 1_000): Message {
   return { id: `${role}-${String(timestamp)}`, role, content, timestamp };
@@ -125,9 +126,32 @@ describe("InferenceEngineWebLLM.generate", () => {
 
     expect(received).toEqual(["Hola", ", ", "mundo"]);
     expect(create).toHaveBeenCalledWith({
-      messages: [{ role: "user", content: "hola" }],
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: "hola" },
+      ],
       stream: true,
     });
+  });
+
+  it("prefixes the system prompt exactly once, even with a multi-turn history", async () => {
+    const { engine, create } = createFakeMlcEngine([]);
+    const engineFactory: MlcEngineFactory = vi.fn().mockResolvedValue(engine);
+    const inferenceEngine = new InferenceEngineWebLLM("test-model", engineFactory);
+    await inferenceEngine.initialize("webgpu");
+
+    const history: Message[] = [
+      createMessage("user", "hola", 1),
+      createMessage("assistant", "Hola, ¿en qué puedo ayudarte?", 2),
+      createMessage("user", "que puedes hacer", 3),
+    ];
+    // Triggers `chat.completions.create()` without needing a bound loop
+    // variable (the fake engine yields no chunks).
+    await inferenceEngine.generate(history)[Symbol.asyncIterator]().next();
+
+    const request = create.mock.calls[0]?.[0] as { messages: unknown[] };
+    expect(request.messages).toHaveLength(4);
+    expect(request.messages[0]).toEqual({ role: "system", content: SYSTEM_PROMPT });
   });
 
   it("throws if invoked before initialize() has successfully finished", () => {
@@ -203,5 +227,13 @@ describe("classifyInitializationError", () => {
 
   it("classifies a non-Error value as other_cause", () => {
     expect(classifyInitializationError("fallo desconocido")).toBe("other_cause");
+  });
+});
+
+describe("SYSTEM_PROMPT", () => {
+  it("instructs the model to always answer in Spanish", () => {
+    // Guards against silently dropping the language instruction, which was
+    // the root cause of the assistant replying in English (e.g. to "hola").
+    expect(SYSTEM_PROMPT).toMatch(/español/i);
   });
 });

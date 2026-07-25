@@ -23,7 +23,7 @@
 // dispatches with different captured `partialText`.
 
 import { useId, useState } from "react";
-import type { FormEvent } from "react";
+import type { FormEvent, KeyboardEvent } from "react";
 import { validateMessage } from "../message-validator/validateMessage";
 import type { Message } from "../types/models";
 import type { GenerationState } from "../inference-engine/reduceGeneration";
@@ -93,8 +93,13 @@ export function MessageInput({
     setTouched(true);
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>): void {
-    event.preventDefault();
+  /**
+   * Shared by the form's submit (button click / native Enter on a plain
+   * `input`, not applicable here since this is a `textarea`) and by
+   * `handleKeyDown`'s Enter-to-send, so both paths go through the exact same
+   * validation/disabling guards (4.4, 4.6, 4.7, 4.8) with no duplicated logic.
+   */
+  function submitMessage(): void {
     setTouched(true);
 
     if (generating || !engineReady) {
@@ -109,6 +114,32 @@ export function MessageInput({
     onSend(result.normalizedContent);
     setValue("");
     setTouched(false);
+  }
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    submitMessage();
+  }
+
+  // Enter sends, Shift+Enter (or Ctrl/Alt/Meta+Enter) inserts a newline.
+  // Since the field is a `textarea`, Enter would otherwise just insert a
+  // newline and never submit the form -- this restores the behavior users
+  // expect from a chat input. Composition (IME) is excluded: while composing
+  // an input method's candidate, Enter confirms the candidate and must not
+  // send the message.
+  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>): void {
+    if (
+      event.key !== "Enter" ||
+      event.shiftKey ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.nativeEvent.isComposing
+    ) {
+      return;
+    }
+    event.preventDefault();
+    submitMessage();
   }
 
   function handleCancel(): void {
@@ -136,9 +167,11 @@ export function MessageInput({
         onBlur={() => {
           setTouched(true);
         }}
+        onKeyDown={handleKeyDown}
         aria-describedby={showValidationError || !engineReady ? errorId : undefined}
         aria-invalid={showValidationError}
       />
+      <p className="message-input__hint">Enter para enviar · Shift+Enter para nueva línea</p>
       <div
         id={errorId}
         className={`message-input__status-message${showValidationError ? " message-input__status-message--error" : ""}`}
