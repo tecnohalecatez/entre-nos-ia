@@ -35,7 +35,6 @@
 
   font: 16px/145% var(--sans);
   letter-spacing: 0.1px;
-  color-scheme: light dark;
   color: var(--text);
   background: var(--bg);
   font-synthesis: none;
@@ -44,33 +43,39 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #a3a0ac;
-    --text-h: #f5f3f7;
-    --bg: #100b18;
-    --surface: #17111f;
-    --surface-2: #1f1729;
-    --border: #2c2436;
-    --code-bg: #1c1626;
+/*
+ * Theme tokens are switched via `data-theme` on `<html>`, written by
+ * `ThemeProvider` (`src/theme/`) once the user's preference (system, light
+ * or dark) has been resolved -- rather than a `prefers-color-scheme` media
+ * query, which can't be overridden by an in-app choice. `color-scheme` is
+ * likewise set per-theme by `ThemeProvider`'s `applyTheme()` (not declared
+ * here), so native form controls/scrollbars follow the resolved theme too.
+ */
+:root[data-theme="dark"] {
+  --text: #a3a0ac;
+  --text-h: #f5f3f7;
+  --bg: #100b18;
+  --surface: #17111f;
+  --surface-2: #1f1729;
+  --border: #2c2436;
+  --code-bg: #1c1626;
 
-    --accent: #c084fc;
-    --accent-2: #a855f7;
-    --accent-bg: rgba(192, 132, 252, 0.14);
-    --accent-border: rgba(192, 132, 252, 0.45);
-    --accent-gradient: linear-gradient(135deg, #e0aaff 0%, #c084fc 50%, #7c3aed 100%);
-    --accent-glow: 0 0 28px rgba(192, 132, 252, 0.3);
+  --accent: #c084fc;
+  --accent-2: #a855f7;
+  --accent-bg: rgba(192, 132, 252, 0.14);
+  --accent-border: rgba(192, 132, 252, 0.45);
+  --accent-gradient: linear-gradient(135deg, #e0aaff 0%, #c084fc 50%, #7c3aed 100%);
+  --accent-glow: 0 0 28px rgba(192, 132, 252, 0.3);
 
-    --success: #4ade80;
-    --success-bg: rgba(74, 222, 128, 0.12);
-    --danger: #f87171;
-    --danger-bg: rgba(248, 113, 113, 0.12);
-    --warning: #fbbf24;
-    --warning-bg: rgba(251, 191, 36, 0.14);
+  --success: #4ade80;
+  --success-bg: rgba(74, 222, 128, 0.12);
+  --danger: #f87171;
+  --danger-bg: rgba(248, 113, 113, 0.12);
+  --warning: #fbbf24;
+  --warning-bg: rgba(251, 191, 36, 0.14);
 
-    --shadow: rgba(0, 0, 0, 0.45) 0 10px 15px -3px, rgba(0, 0, 0, 0.3) 0 4px 6px -2px;
-    --shadow-lg: rgba(0, 0, 0, 0.6) 0 24px 48px -12px, rgba(0, 0, 0, 0.35) 0 8px 16px -8px;
-  }
+  --shadow: rgba(0, 0, 0, 0.45) 0 10px 15px -3px, rgba(0, 0, 0, 0.3) 0 4px 6px -2px;
+  --shadow-lg: rgba(0, 0, 0, 0.6) 0 24px 48px -12px, rgba(0, 0, 0, 0.35) 0 8px 16px -8px;
 }
 
 * {

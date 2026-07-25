@@ -36,6 +36,7 @@ import userEvent from "@testing-library/user-event";
 import { NotificationProvider } from "./notification";
 import { AppStateProvider } from "./app-state/AppStateProvider";
 import type { AppStateProviderProps } from "./app-state/AppStateProvider";
+import { ThemeProvider } from "./theme";
 import { useAppState } from "./app-state/useAppState";
 import { degradedModeMessage } from "./app-state/degradedMode";
 import { isInStandaloneMode } from "./app-state/standaloneMode";
@@ -83,11 +84,13 @@ function TestAppContent() {
 
 function renderTestApp(props: Partial<AppStateProviderProps> = {}) {
   return render(
-    <NotificationProvider>
-      <AppStateProvider {...(props as AppStateProviderProps)}>
-        <TestAppContent />
-      </AppStateProvider>
-    </NotificationProvider>,
+    <ThemeProvider>
+      <NotificationProvider>
+        <AppStateProvider {...(props as AppStateProviderProps)}>
+          <TestAppContent />
+        </AppStateProvider>
+      </NotificationProvider>
+    </ThemeProvider>,
   );
 }
 

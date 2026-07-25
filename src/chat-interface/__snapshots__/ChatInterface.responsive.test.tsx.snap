@@ -28,13 +28,29 @@ exports[`ChatInterface — responsive design (10.1, 10.2, 10.3) > DOM structure 
         WebGPU
       </span>
     </div>
-    <button
-      aria-expanded="false"
-      class="chat-interface__help-button button button--ghost button--sm"
-      type="button"
+    <div
+      class="chat-interface__header-actions"
     >
-      Ayuda
-    </button>
+      <button
+        aria-label="Tema: sigue al sistema (cambiar a claro)"
+        class="theme-toggle button button--ghost button--icon"
+        title="Tema: sigue al sistema (cambiar a claro)"
+        type="button"
+      >
+        <span
+          aria-hidden="true"
+        >
+          🖥️
+        </span>
+      </button>
+      <button
+        aria-expanded="false"
+        class="chat-interface__help-button button button--ghost button--sm"
+        type="button"
+      >
+        Ayuda
+      </button>
+    </div>
   </header>
   <div
     class="chat-interface__body"

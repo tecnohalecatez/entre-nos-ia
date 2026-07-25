@@ -70,8 +70,15 @@
   flex-wrap: wrap;
 }
 
-.chat-interface__help-button {
+.chat-interface__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin-left: auto;
+  flex-shrink: 0;
+}
+
+.chat-interface__help-button {
   flex-shrink: 0;
 }
 

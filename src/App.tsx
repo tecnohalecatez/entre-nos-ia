@@ -19,6 +19,7 @@ import { useAppState } from "./app-state/useAppState";
 import { degradedModeMessage } from "./app-state/degradedMode";
 import { UpdateAvailableNotification } from "./service-worker-app/UpdateAvailableNotification";
 import { ChatInterface } from "./chat-interface/ChatInterface";
+import { ThemeProvider } from "./theme";
 import "./App.css";
 
 function AppContent() {
@@ -60,11 +61,13 @@ function AppContent() {
 
 function App() {
   return (
-    <NotificationProvider>
-      <AppStateProvider>
-        <AppContent />
-      </AppStateProvider>
-    </NotificationProvider>
+    <ThemeProvider>
+      <NotificationProvider>
+        <AppStateProvider>
+          <AppContent />
+        </AppStateProvider>
+      </NotificationProvider>
+    </ThemeProvider>
   );
 }
 

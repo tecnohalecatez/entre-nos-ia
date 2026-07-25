@@ -36,9 +36,12 @@
 // content on screen during the brief window between the `"cancel"` dispatch
 // and that persistence resolving.
 
+import { useEffect, useRef } from "react";
+import type { UIEvent } from "react";
 import { useAppState } from "../app-state/useAppState";
 import type { Message } from "../types/models";
 import { Markdown } from "./Markdown";
+import { isScrolledToBottom } from "./isScrolledToBottom";
 import "./MessageHistory.css";
 
 /** Sorts a copy of `messages` ascending by `timestamp` (5.5). */
@@ -54,6 +57,36 @@ export function MessageHistory() {
       ? conversations.find((candidate) => candidate.id === activeConversationId) ?? null
       : null;
 
+  const sortedMessages = conversation !== null ? sortByTimestampAscending(conversation.messages) : [];
+  const partialText = generationState.type === "generating" ? generationState.partialText : "";
+
+  // Sticks to the bottom while the user hasn't scrolled away: `true` by
+  // default (opening a conversation shows its most recent messages), and
+  // recomputed on every `onScroll` from the user's own position rather than
+  // from React state, so a high-frequency event doesn't trigger a re-render
+  // on each scroll tick.
+  const containerRef = useRef<HTMLElement>(null);
+  const stickToBottomRef = useRef(true);
+
+  // Both hooks are declared unconditionally, above the early return below,
+  // so the empty-conversation branch doesn't change how many hooks run.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (container === null || !stickToBottomRef.current) {
+      return;
+    }
+    // Direct `scrollTop` assignment (not `scrollIntoView`/`scrollTo`):
+    // avoids needing a sentinel element -- which, inside this flex column
+    // with `gap: 14px` (MessageHistory.css), would add dead space at the
+    // end -- and stays synchronous, unlike `scrollTo({ behavior: "smooth" })`.
+    container.scrollTop = container.scrollHeight;
+  }, [sortedMessages.length, generationState.type, partialText]);
+
+  function handleScroll(event: UIEvent<HTMLElement>): void {
+    const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
+    stickToBottomRef.current = isScrolledToBottom({ scrollTop, scrollHeight, clientHeight });
+  }
+
   if (conversation === null) {
     return (
       <section
@@ -67,10 +100,10 @@ export function MessageHistory() {
     );
   }
 
-  const sortedMessages = sortByTimestampAscending(conversation.messages);
-
   return (
     <section
+      ref={containerRef}
+      onScroll={handleScroll}
       className="message-history"
       role="log"
       aria-live="polite"

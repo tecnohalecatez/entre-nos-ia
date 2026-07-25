@@ -28,6 +28,7 @@ import { ConversationStoreDexie } from "../conversation-store/ConversationStore"
 import type { InferenceEngine } from "../inference-engine/InferenceEngine";
 import type { DecideInput, CompatibilityResult } from "../compatibility-detector/decide";
 import type { ModelDownloadManager } from "../model-download-manager/ensureModelAvailable";
+import { ThemeProvider } from "../theme";
 import { ChatInterface } from "./ChatInterface";
 
 beforeEach(() => {
@@ -73,18 +74,20 @@ function createTestModelDownloadManager(): ModelDownloadManager {
 
 function renderWithProviders(props: Partial<AppStateProviderProps> = {}) {
   return render(
-    <NotificationProvider>
-      <AppStateProvider
-        detectFn={vi.fn().mockResolvedValue(ANY_PROBE)}
-        decideFn={vi.fn().mockReturnValue(RESULT_WITH_ENGINE)}
-        createInferenceEngine={createFakeInferenceEngine}
-        createConversationManager={createTestConversationManager}
-        modelDownloadManager={createTestModelDownloadManager()}
-        {...props}
-      >
-        <ChatInterface />
-      </AppStateProvider>
-    </NotificationProvider>,
+    <ThemeProvider>
+      <NotificationProvider>
+        <AppStateProvider
+          detectFn={vi.fn().mockResolvedValue(ANY_PROBE)}
+          decideFn={vi.fn().mockReturnValue(RESULT_WITH_ENGINE)}
+          createInferenceEngine={createFakeInferenceEngine}
+          createConversationManager={createTestConversationManager}
+          modelDownloadManager={createTestModelDownloadManager()}
+          {...props}
+        >
+          <ChatInterface />
+        </AppStateProvider>
+      </NotificationProvider>
+    </ThemeProvider>,
   );
 }
 

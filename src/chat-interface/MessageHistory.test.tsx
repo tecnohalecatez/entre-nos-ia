@@ -11,7 +11,7 @@
 // requirements.md (4.2, 5.5).
 
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { AppStateContext, type AppStateContextValue } from "../app-state/context";
 import { MessageHistory } from "./MessageHistory";
 import type { Conversation, Message } from "../types/models";
@@ -173,5 +173,89 @@ describe("MessageHistory", () => {
     // The already-persisted Message is rendered exactly once (no duplicate
     // ephemeral bubble for the "cancelled" state).
     expect(screen.getAllByText("texto cancelado")).toHaveLength(1);
+  });
+
+  describe("auto-scroll", () => {
+    // happy-dom (this project's test DOM environment) does no layout:
+    // `scrollHeight`/`clientHeight` always read back 0 on real elements.
+    // These tests shadow them with own data properties so the component's
+    // `container.scrollTop = container.scrollHeight` assignment (and the
+    // `isScrolledToBottom` check inside `onScroll`) becomes observable.
+    function stubScrollMetrics(element: HTMLElement, scrollHeight: number, clientHeight: number): void {
+      Object.defineProperty(element, "scrollHeight", { value: scrollHeight, configurable: true });
+      Object.defineProperty(element, "clientHeight", { value: clientHeight, configurable: true });
+    }
+
+    it("follows new content by assigning scrollTop = scrollHeight while stuck to the bottom", () => {
+      const conversation: Conversation = { id: "conv-1", createdAt: 1, messages: [] };
+      const userMessage = createMessage({ id: "u1", timestamp: 10 });
+
+      const { rerender } = render(
+        <AppStateContext.Provider
+          value={createTestContext({
+            conversations: [conversation],
+            activeConversationId: "conv-1",
+            generationState: { type: "generating", userMessage, partialText: "Ho" },
+          })}
+        >
+          <MessageHistory />
+        </AppStateContext.Provider>,
+      );
+
+      const container = screen.getByRole("log", { name: "Historial de mensajes" });
+      stubScrollMetrics(container, 500, 100);
+
+      rerender(
+        <AppStateContext.Provider
+          value={createTestContext({
+            conversations: [conversation],
+            activeConversationId: "conv-1",
+            generationState: { type: "generating", userMessage, partialText: "Hola mundo" },
+          })}
+        >
+          <MessageHistory />
+        </AppStateContext.Provider>,
+      );
+
+      expect(container.scrollTop).toBe(500);
+    });
+
+    it("does not move the scroll position once the user has scrolled away from the bottom", () => {
+      const conversation: Conversation = { id: "conv-1", createdAt: 1, messages: [] };
+      const userMessage = createMessage({ id: "u1", timestamp: 10 });
+
+      const { rerender } = render(
+        <AppStateContext.Provider
+          value={createTestContext({
+            conversations: [conversation],
+            activeConversationId: "conv-1",
+            generationState: { type: "generating", userMessage, partialText: "Ho" },
+          })}
+        >
+          <MessageHistory />
+        </AppStateContext.Provider>,
+      );
+
+      const container = screen.getByRole("log", { name: "Historial de mensajes" });
+      stubScrollMetrics(container, 500, 100);
+
+      // Simulates the user scrolling up, well past the bottom threshold.
+      container.scrollTop = 50;
+      fireEvent.scroll(container);
+
+      rerender(
+        <AppStateContext.Provider
+          value={createTestContext({
+            conversations: [conversation],
+            activeConversationId: "conv-1",
+            generationState: { type: "generating", userMessage, partialText: "Hola mundo" },
+          })}
+        >
+          <MessageHistory />
+        </AppStateContext.Provider>,
+      );
+
+      expect(container.scrollTop).toBe(50);
+    });
   });
 });

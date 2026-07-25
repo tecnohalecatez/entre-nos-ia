@@ -38,6 +38,7 @@ import { ActiveEngineIndicator } from "./ActiveEngineIndicator";
 import { OfflineStatusIndicator } from "./OfflineStatusIndicator";
 import { HelpSection } from "./HelpSection";
 import { PwaInstallControl } from "../pwa-install/PwaInstallControl";
+import { ThemeToggle } from "../theme";
 import { useSendMessage } from "./useSendMessage";
 import "./ChatInterface.css";
 
@@ -60,16 +61,19 @@ export function ChatInterface() {
           <OfflineStatusIndicator />
           <PwaInstallControl />
         </div>
-        <button
-          type="button"
-          className="chat-interface__help-button button button--ghost button--sm"
-          aria-expanded={helpVisible}
-          onClick={() => {
-            setHelpVisible((visible) => !visible);
-          }}
-        >
-          Ayuda
-        </button>
+        <div className="chat-interface__header-actions">
+          <ThemeToggle />
+          <button
+            type="button"
+            className="chat-interface__help-button button button--ghost button--sm"
+            aria-expanded={helpVisible}
+            onClick={() => {
+              setHelpVisible((visible) => !visible);
+            }}
+          >
+            Ayuda
+          </button>
+        </div>
       </header>
 
       {helpVisible ? <HelpSection /> : null}
