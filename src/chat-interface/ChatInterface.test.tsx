@@ -54,6 +54,7 @@ const ANY_PROBE: DecideInput = {
   wasmAvailable: true,
   memoryGB: 8,
   isMobileDevice: false,
+  shaderF16Available: true,
 };
 
 const RESULT_WITH_ENGINE: CompatibilityResult = {
@@ -63,6 +64,7 @@ const RESULT_WITH_ENGINE: CompatibilityResult = {
   selectedEngine: "webgpu",
   missingCapabilities: [],
   modelTier: "full",
+  shaderF16Available: true,
 };
 
 /**

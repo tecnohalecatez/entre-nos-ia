@@ -130,15 +130,17 @@ async function resolveModelRequest(request: Request): Promise<Response> {
  * of the flow (`manageModelCacheVersion`, `shouldPurgeModelCache`) would not
  * need to change.
  *
- * Since the app loads one of two models depending on device capability
- * (`MODEL_ID_FULL`/`MODEL_ID_COMPACT` in `src/app-state/configuration.ts`,
- * Requirement 1), this identifies the *set* the build supports rather than
- * a single model: it must change whenever that set changes (so
- * `shouldPurgeModelCache` still purges stale weights on a real model-set
- * change), but must NOT vary per device/tier -- doing so would purge
- * Cache_Modelo on every activation for devices on the compact tier.
+ * Since the app loads one of four models depending on device capability
+ * (`MODEL_ID_FULL`/`MODEL_ID_FULL_F32`/`MODEL_ID_COMPACT`/
+ * `MODEL_ID_COMPACT_F32` in `src/app-state/configuration.ts`, Requirement 1:
+ * size tier x shader-f16 support), this identifies the *set* the build
+ * supports rather than a single model: it must change whenever that set
+ * changes (so `shouldPurgeModelCache` still purges stale weights on a real
+ * model-set change), but must NOT vary per device/tier -- doing so would
+ * purge Cache_Modelo on every activation for devices on the compact tier or
+ * without shader-f16 support.
  */
-const REQUIRED_MODEL_VERSION = "llama-3.2-3b+1b-q4f16_1";
+const REQUIRED_MODEL_VERSION = "llama-3.2-3b+1b-q4f16_1+q4f32_1";
 
 /** Small cache name used only to persist the active model version marker. */
 const MODEL_CACHE_METADATA_NAME = "model-cache-metadata";

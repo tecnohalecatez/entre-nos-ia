@@ -21,6 +21,11 @@ export interface DecideInput {
   memoryGB: number | null;
   /** Best-effort mobile-device signal (Requirement 1, model tier). See `detect.ts`. */
   isMobileDevice: boolean;
+  /**
+   * Whether the WebGPU adapter supports the `shader-f16` extension, required
+   * by WebLLM's `q4f16_1`-quantized models. See `detect.ts`, `probeWebgpu()`.
+   */
+  shaderF16Available: boolean;
 }
 
 /** Pure, serializable result of the compatibility decision. */
@@ -33,6 +38,15 @@ export interface CompatibilityResult {
   missingCapabilities: string[];
   /** Which model size `AppStateProvider` should load; only meaningful when `selectedEngine !== "none"`. */
   modelTier: ModelTier;
+  /**
+   * Pass-through of the input probe, unchanged: NOT used to decide
+   * `selectedEngine`/`missingCapabilities` (missing `shader-f16` isn't a
+   * blocking incompatibility, `configuration.ts`'s `modelIdForTier()` has a
+   * `q4f32_1` fallback that doesn't require it). Kept here, alongside
+   * `modelTier`, so `AppStateProvider` has everything it needs to resolve
+   * the concrete model id from a single `CompatibilityResult`.
+   */
+  shaderF16Available: boolean;
 }
 
 const MIN_MEMORY_GB = 4;
@@ -71,7 +85,7 @@ const MIN_MEMORY_GB_FULL_MODEL = 8;
  * which is simply unused in that case (no model is loaded).
  */
 export function decide(input: DecideInput): CompatibilityResult {
-  const { webgpuAvailable, wasmAvailable, memoryGB, isMobileDevice } = input;
+  const { webgpuAvailable, wasmAvailable, memoryGB, isMobileDevice, shaderF16Available } = input;
 
   const insufficientMemory = memoryGB !== null && memoryGB < MIN_MEMORY_GB;
 
@@ -102,5 +116,6 @@ export function decide(input: DecideInput): CompatibilityResult {
     selectedEngine,
     missingCapabilities,
     modelTier,
+    shaderF16Available,
   };
 }

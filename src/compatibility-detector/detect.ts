@@ -37,21 +37,39 @@ function withTimeout<T>(promise: Promise<T>, ms: number, timeoutValue: T): Promi
   });
 }
 
+/** Result of probing the WebGPU adapter: availability plus its optional-feature support. */
+interface WebgpuProbeResult {
+  webgpuAvailable: boolean;
+  /**
+   * Whether the adapter supports the `shader-f16` extension. WebLLM's whole
+   * prebuilt model catalog requires it (`required_features: ["shader-f16"]`
+   * on every catalog entry); many Android GPU drivers (Adreno, Mali) expose
+   * WebGPU but not this optional extension. Read here (synchronously, off
+   * the same adapter) instead of a second `requestAdapter()` call, so
+   * `configuration.ts`'s `modelIdForTier()` can pick the `q4f32_1` fallback
+   * variant instead of failing engine initialization outright.
+   */
+  shaderF16Available: boolean;
+}
+
 /**
  * Probes real WebGPU availability (Requirement 1.1): it is not enough for
  * `navigator.gpu` to exist, it also tries to obtain an adapter via
  * `requestAdapter()` (bounded to 5s) to verify the browser can actually use
  * it. A null adapter, a rejection or a timeout are treated as "not
- * available".
+ * available" (and, consequently, `shader-f16` as unsupported).
  */
-async function probeWebgpu(): Promise<boolean> {
+async function probeWebgpu(): Promise<WebgpuProbeResult> {
   const gpu = navigator.gpu;
   if (gpu === undefined) {
-    return false;
+    return { webgpuAvailable: false, shaderF16Available: false };
   }
 
   const adapter = await withTimeout(gpu.requestAdapter().catch(() => null), PROBE_TIMEOUT_MS, null);
-  return adapter !== null;
+  if (adapter === null) {
+    return { webgpuAvailable: false, shaderF16Available: false };
+  }
+  return { webgpuAvailable: true, shaderF16Available: adapter.features.has("shader-f16") };
 }
 
 /**
@@ -95,12 +113,12 @@ async function probeIsMobileDevice(): Promise<boolean> {
  * probe) required by `decide()`. See Requirements 1.1, 1.2, 1.7.
  */
 export async function detect(): Promise<DecideInput> {
-  const [webgpuAvailable, wasmAvailable, memoryGB, isMobileDevice] = await Promise.all([
+  const [{ webgpuAvailable, shaderF16Available }, wasmAvailable, memoryGB, isMobileDevice] = await Promise.all([
     probeWebgpu(),
     probeWasm(),
     probeMemoryGB(),
     probeIsMobileDevice(),
   ]);
 
-  return { webgpuAvailable, wasmAvailable, memoryGB, isMobileDevice };
+  return { webgpuAvailable, wasmAvailable, memoryGB, isMobileDevice, shaderF16Available };
 }

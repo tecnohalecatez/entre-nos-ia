@@ -65,13 +65,17 @@ export type MlcEngineFactory = (
 ) => Promise<MlcEngine>;
 
 /** Cause of an InferenceEngine initialization failure (Requisitos 8.1, 8.5). */
-export type EngineInitializationFailureCause = "insufficient_memory" | "network_error" | "other_cause";
+export type EngineInitializationFailureCause =
+  | "insufficient_memory"
+  | "network_error"
+  | "unsupported_gpu_feature"
+  | "other_cause";
 
 /**
  * Typed error thrown by `initialize()` when engine loading fails, allowing
  * the caller to distinguish between insufficient memory (8.1), a network
- * failure while fetching the model, and any other cause (8.5) without
- * freely inspecting error messages.
+ * failure while fetching the model, an unsupported required GPU feature,
+ * and any other cause (8.5) without freely inspecting error messages.
  */
 export class EngineInitializationError extends Error {
   override readonly cause: EngineInitializationFailureCause;
@@ -83,7 +87,9 @@ export class EngineInitializationError extends Error {
         ? "Could not initialize the InferenceEngine: insufficient memory."
         : cause === "network_error"
           ? "Could not initialize the InferenceEngine: network error while fetching the model."
-          : "Could not initialize the InferenceEngine."
+          : cause === "unsupported_gpu_feature"
+            ? "Could not initialize the InferenceEngine: a required GPU feature is not supported."
+            : "Could not initialize the InferenceEngine."
     );
     this.name = "EngineInitializationError";
     this.cause = cause;
@@ -125,14 +131,26 @@ function extractErrorDescription(error: unknown): string {
 
 /**
  * Classifies an engine initialization error as insufficient memory (8.1), a
- * network/download failure, or another cause (8.5).
+ * network/download failure, an unsupported required GPU feature, or another
+ * cause (8.5).
  *
  * `MLCEngine.reload()` throws a `DeviceLostError` (name `"DeviceLostError"`)
  * when the WebGPU device is lost, which, per WebLLM's own documentation,
  * happens "mostly due to OOM"; it's detected by name because that class is
- * internal to the SDK and not part of its exported public API. For any
- * other error (including WASM failures without WebGPU), the message is
- * inspected first for common out-of-memory patterns, then for common
+ * internal to the SDK and not part of its exported public API.
+ *
+ * `ShaderF16SupportError`/`FeatureSupportError` (also detected by name, same
+ * reason) are WebLLM's error for a model whose `required_features` the
+ * adapter doesn't support -- in practice, always `shader-f16` today (the
+ * only feature required anywhere in WebLLM's prebuilt catalog). This is a
+ * defense-in-depth classification: `configuration.ts`'s `modelIdForTier()`
+ * proactively picks a `q4f32_1` model when `shaderF16Available` is false
+ * specifically to avoid this error; it should only surface if that
+ * proactive check itself is ever wrong (e.g. a future catalog model
+ * requiring a different, unprobed feature).
+ *
+ * For any other error (including WASM failures without WebGPU), the message
+ * is inspected first for common out-of-memory patterns, then for common
  * network-failure patterns (the model's weight shards are fetched from a
  * third-party CDN, so this is a frequent real-world failure mode -- e.g. a
  * content blocker or privacy-focused browser mode blocking the request).
@@ -140,6 +158,9 @@ function extractErrorDescription(error: unknown): string {
 export function classifyInitializationError(error: unknown): EngineInitializationFailureCause {
   if (error instanceof Error && error.name === "DeviceLostError") {
     return "insufficient_memory";
+  }
+  if (error instanceof Error && (error.name === "ShaderF16SupportError" || error.name === "FeatureSupportError")) {
+    return "unsupported_gpu_feature";
   }
   const description = extractErrorDescription(error);
   if (OOM_MESSAGE_PATTERNS.some((pattern) => pattern.test(description))) {

@@ -44,6 +44,8 @@ Esta funcionalidad implementa un asistente de inteligencia artificial conversaci
 8. IF la memoria disponible del dispositivo es inferior a 4 GB, THEN THE Sistema SHALL activar el Modo_Degradado y mostrar al usuario un mensaje explicando que el dispositivo no cuenta con memoria suficiente.
 9. WHEN el Detector_Compatibilidad determina que el dispositivo es de tipo móvil, o que su memoria disponible es inferior al umbral del nivel de modelo completo, THE Detector_Compatibilidad SHALL resolver el Nivel_Modelo como "compacto"; en cualquier otro caso SHALL resolverlo como "completo". Esta decisión es independiente de la evaluada en los criterios 1.3/1.4/1.5/1.8 (mecanismo de inferencia y Modo_Degradado).
 10. WHEN el Motor_Inferencia se inicializa con Nivel_Modelo "compacto", THE Motor_Inferencia SHALL cargar un modelo de menor tamaño que el usado con Nivel_Modelo "completo", preservando el mismo idioma de respuesta (Requisito 4) y el resto del comportamiento funcional del Sistema.
+11. WHEN el Detector_Compatibilidad verifica la disponibilidad de WebGPU, THE Detector_Compatibilidad SHALL además verificar si el adaptador soporta la extensión `shader-f16`.
+12. WHERE el adaptador WebGPU no soporta la extensión `shader-f16`, THE Motor_Inferencia SHALL cargar la variante del modelo que no requiere esa extensión, preservando el Nivel_Modelo resuelto por el criterio 1.9 y sin activar el Modo_Degradado por ese motivo.
 
 ### Requisito 2: Descarga y cacheo local de los pesos del modelo
 

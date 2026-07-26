@@ -269,6 +269,17 @@ Este plan traduce el diseño técnico (React + Vite + TypeScript, WebLLM, vite-p
     - Evita purgar Cache_Modelo en cada activación para dispositivos en nivel "compacto"
     - _Requirements: 1.10_
 
+- [x] 26. Detectar soporte de `shader-f16` y elegir la variante de cuantización correcta
+  - [x] 26.1 Sondear `adapter.features.has("shader-f16")` en `detect()` sobre el mismo adapter de `probeWebgpu()`
+    - Sin una segunda llamada a `requestAdapter()`; `shaderF16Available` se agrega a `DecideInput`/`CompatibilityResult` como pass-through puro (no bloqueante: hay variante de modelo sin ese requisito)
+    - _Requirements: 1.11_
+  - [x] 26.2 Agregar `MODEL_ID_FULL_F32`/`MODEL_ID_COMPACT_F32` y extender `modelIdForTier()` a una matriz 2×2 (tamaño × cuantización)
+    - Corrige el bug real reportado: celulares con WebGPU pero sin `shader-f16` (común en drivers Adreno/Mali) recibían `ShaderF16SupportError` de WebLLM antes de descargar ningún peso
+    - _Requirements: 1.12_
+  - [x] 26.3 Clasificación de red de seguridad para `ShaderF16SupportError`/`FeatureSupportError` en `classifyInitializationError`
+    - Nueva causa `unsupported_gpu_feature` con mensaje de Modo_Degradado específico y accionable, por si el sondeo proactivo (26.1) no evita el error
+    - _Requirements: 1.12_
+
 ## Notes
 
 - Las tareas marcadas con `*` son opcionales (pruebas) y pueden omitirse para un MVP más rápido; el modelo NO debe implementarlas salvo indicación explícita.

@@ -12,7 +12,10 @@ import type { CompatibilityResult } from "../compatibility-detector/decide";
 /** Cause that activated Degraded_Mode. */
 export type DegradedModeCause =
   | { type: "incompatibility"; missingCapabilities: string[] }
-  | { type: "engine_init_failure"; cause: "insufficient_memory" | "network_error" | "other_cause" }
+  | {
+      type: "engine_init_failure";
+      cause: "insufficient_memory" | "network_error" | "unsupported_gpu_feature" | "other_cause";
+    }
   | { type: "model_download_failure" }
   | { type: "no_connection_initial_load" };
 
@@ -33,12 +36,19 @@ function describeMissingCapabilities(missingCapabilities: string[]): string {
 }
 
 /** Message for each possible `engine_init_failure` sub-cause. */
-function engineInitFailureMessage(cause: "insufficient_memory" | "network_error" | "other_cause"): string {
+function engineInitFailureMessage(
+  cause: "insufficient_memory" | "network_error" | "unsupported_gpu_feature" | "other_cause",
+): string {
   if (cause === "insufficient_memory") {
     return "El asistente no pudo inicializarse: el dispositivo no cuenta con memoria suficiente.";
   }
   if (cause === "network_error") {
     return "No se pudo descargar el modelo de IA. Verificá tu conexión a internet; si usás un bloqueador de contenido, VPN o un modo de privacidad estricto (por ejemplo, los Shields de Brave), probá desactivarlo para este sitio e intentá de nuevo.";
+  }
+  if (cause === "unsupported_gpu_feature") {
+    // Not something reloading fixes (unlike the generic message below):
+    // it's a fixed capability of this device's GPU/driver.
+    return "El asistente no pudo inicializarse porque la GPU de este dispositivo no soporta una función gráfica necesaria (shader-f16), algo común en ciertos modelos de celular. No se soluciona recargando la página; probá con otro dispositivo o navegador.";
   }
   return "El asistente no pudo inicializarse. Esto puede deberse a que tu navegador no sea completamente compatible con la tecnología requerida, a una extensión o configuración de privacidad bloqueando la descarga del modelo, o a un problema temporal. Probá recargar la página; si el problema persiste, verificá que tu navegador soporte WebGPU o WebAssembly y que no tengas bloqueadores de contenido activos para este sitio.";
 }

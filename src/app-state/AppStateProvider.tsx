@@ -278,7 +278,10 @@ export function AppStateProvider({
       // reliably OOM-crashes memory-constrained devices such as phones, see
       // `configuration.ts`).
       try {
-        await inferenceEngine.initialize(result.selectedEngine, modelIdForTier(result.modelTier));
+        await inferenceEngine.initialize(
+          result.selectedEngine,
+          modelIdForTier(result.modelTier, result.shaderF16Available),
+        );
       } catch (error) {
         if (isCancelled(controller.signal)) {
           return;
