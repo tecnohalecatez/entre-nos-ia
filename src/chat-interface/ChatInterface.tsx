@@ -35,6 +35,7 @@ import { ConversationList } from "./ConversationList";
 import { MessageHistory } from "./MessageHistory";
 import { MessageInput } from "./MessageInput";
 import { ActiveEngineIndicator } from "./ActiveEngineIndicator";
+import { AppVersionLabel } from "./AppVersionLabel";
 import { OfflineStatusIndicator } from "./OfflineStatusIndicator";
 import { HelpSection } from "./HelpSection";
 import { PwaInstallControl } from "../pwa-install/PwaInstallControl";
@@ -58,6 +59,7 @@ export function ChatInterface() {
         </span>
         <div className="chat-interface__indicators">
           <ActiveEngineIndicator />
+          <AppVersionLabel />
           <OfflineStatusIndicator />
           <PwaInstallControl />
         </div>
