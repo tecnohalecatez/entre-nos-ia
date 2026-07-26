@@ -25,6 +25,8 @@ export const EMPTY_STATE_TEXT = "No tienes conversaciones guardadas";
 const INVALID_JSON_ERROR_TEXT = "El archivo seleccionado no es un JSON válido.";
 const INVALID_SCHEMA_ERROR_TEXT =
   "El archivo no tiene el formato esperado de una conversación exportada.";
+const FILE_TOO_LARGE_ERROR_TEXT =
+  "El archivo supera el tamaño máximo permitido para importar una conversación (10 MB).";
 
 function formatLabel(conversation: Conversation): string {
   const firstUserMessage = conversation.messages.find((message) => message.role === "user");
@@ -101,10 +103,12 @@ export function ConversationList() {
 
     const result = await readImportedFile(file);
     if (!result.ok) {
-      showNotification({
-        type: "error",
-        text: result.error === "invalid_json" ? INVALID_JSON_ERROR_TEXT : INVALID_SCHEMA_ERROR_TEXT,
-      });
+      const errorTextByReason: Record<typeof result.error, string> = {
+        invalid_json: INVALID_JSON_ERROR_TEXT,
+        invalid_schema: INVALID_SCHEMA_ERROR_TEXT,
+        file_too_large: FILE_TOO_LARGE_ERROR_TEXT,
+      };
+      showNotification({ type: "error", text: errorTextByReason[result.error] });
       return;
     }
 

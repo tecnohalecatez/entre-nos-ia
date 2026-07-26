@@ -277,5 +277,28 @@ describe("ConversationList", () => {
       });
       expect(screen.getByText(EMPTY_STATE_TEXT)).toBeInTheDocument();
     });
+
+    it("importing a file over the size limit shows an error and adds no conversation", async () => {
+      renderWithProviders();
+      await waitForBoot();
+
+      // Content doesn't matter (and is never read: the size check
+      // short-circuits before it) -- only `file.size` does, so a raw byte
+      // buffer is enough, no need to serialize an actual huge conversation.
+      const oversizedFile = new File([new Uint8Array(10 * 1024 * 1024 + 1)], "enorme.json", {
+        type: "application/json",
+      });
+
+      const user = userEvent.setup();
+      const importInput = screen.getByLabelText("Importar conversación desde archivo");
+      await user.upload(importInput, oversizedFile);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(/supera el tamaño máximo permitido para importar/i),
+        ).toBeInTheDocument();
+      });
+      expect(screen.getByText(EMPTY_STATE_TEXT)).toBeInTheDocument();
+    });
   });
 });

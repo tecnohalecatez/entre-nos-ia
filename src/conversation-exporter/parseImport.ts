@@ -12,7 +12,7 @@ import type { Conversation, Message, MessageRole } from "../types/models";
  */
 export type ImportResult =
   | { ok: true; conversation: Conversation }
-  | { ok: false; error: "invalid_json" | "invalid_schema" };
+  | { ok: false; error: "invalid_json" | "invalid_schema" | "file_too_large" };
 
 function isValidRole(value: unknown): value is MessageRole {
   return value === "user" || value === "assistant";

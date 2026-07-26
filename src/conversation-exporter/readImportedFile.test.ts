@@ -1,6 +1,6 @@
 // Smoke unit tests for `readImportedFile()`.
 // See .kiro/specs/asistente-ia-local/design.md (section "Exportador_Conversaciones").
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ExportedFile } from "../types/models";
 import { readImportedFile } from "./readImportedFile";
 
@@ -41,5 +41,34 @@ describe("readImportedFile", () => {
     const result = await readImportedFile(file);
 
     expect(result).toEqual({ ok: false, error: "invalid_schema" });
+  });
+
+  it("returns error file_too_large without reading the file's content when it exceeds maxBytes", async () => {
+    // `file.text()` is spied on to prove the oversized file's content is
+    // never actually read (the size check must short-circuit before it) --
+    // this is what protects against a huge crafted file freezing the tab.
+    const file = createTextFile("x".repeat(20));
+    const textSpy = vi.spyOn(file, "text");
+
+    const result = await readImportedFile(file, 10);
+
+    expect(result).toEqual({ ok: false, error: "file_too_large" });
+    expect(textSpy).not.toHaveBeenCalled();
+  });
+
+  it("accepts a file at or under maxBytes", async () => {
+    const exportedFile: ExportedFile = {
+      version: 1,
+      id: "conv-original",
+      createdAt: 1000,
+      lastActivityAt: 1100,
+      messages: [],
+    };
+    const text = JSON.stringify(exportedFile);
+    const file = createTextFile(text);
+
+    const result = await readImportedFile(file, new TextEncoder().encode(text).length);
+
+    expect(result.ok).toBe(true);
   });
 });
