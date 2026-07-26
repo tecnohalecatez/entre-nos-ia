@@ -108,7 +108,7 @@ sequenceDiagram
             GDM->>GDM: verificar checksum
             GDM->>SW: guardar en Cache_Modelo
         end
-        App->>MI: inicializar(motor)
+        App->>MI: inicializar(motor, modeloId según nivelModelo)
         MI-->>App: listo
         App->>U: Habilitar Interfaz_Chat
     end
@@ -141,7 +141,7 @@ de forma indefinida, ese mecanismo deja de funcionar. Por eso:
 
 ### Por qué no hace falta más infraestructura
 
-- Sin variables de entorno ni secretos: `MODEL_ID` es una constante de código
+- Sin variables de entorno ni secretos: `MODEL_ID_FULL`/`MODEL_ID_COMPACT` son constantes de código
   (`src/app-state/configuration.ts`), no una credencial; WebLLM descarga los pesos del modelo
   directamente desde el catálogo de MLC-AI en tiempo de ejecución del navegador, no en build.
 - Sin reglas de rewrite/redirect tipo SPA: la aplicación no usa React Router ni rutas del lado del
@@ -161,24 +161,51 @@ interface ResultadoCompatibilidad {
   memoriaGB: number | null; // null si el navegador no expone navigator.deviceMemory
   motorSeleccionado: "webgpu" | "wasm" | "ninguno";
   capacidadesFaltantes: string[]; // p.ej. ["webgpu", "wasm"] o ["memoria"]
+  nivelModelo: "completo" | "compacto"; // Requisito 1.9/1.10
 }
 
 interface DetectorCompatibilidad {
   // Efectúa los sondeos reales del navegador (I/O de entorno, con timeout de 5s por sondeo)
-  detectar(): Promise<{ webgpuDisponible: boolean; wasmDisponible: boolean; memoriaGB: number | null }>;
-  // Función PURA: dado el resultado de los sondeos, decide motor y modo degradado.
+  detectar(): Promise<{
+    webgpuDisponible: boolean;
+    wasmDisponible: boolean;
+    memoriaGB: number | null;
+    esDispositivoMovil: boolean;
+  }>;
+  // Función PURA: dado el resultado de los sondeos, decide motor, modo degradado y nivel de modelo.
   // Esta es la función que se somete a property-based testing (Property 1).
-  decidir(input: { webgpuDisponible: boolean; wasmDisponible: boolean; memoriaGB: number | null }): ResultadoCompatibilidad;
+  decidir(input: {
+    webgpuDisponible: boolean;
+    wasmDisponible: boolean;
+    memoriaGB: number | null;
+    esDispositivoMovil: boolean;
+  }): ResultadoCompatibilidad;
 }
 ```
 
 Separar `detectar()` (I/O, se prueba con mocks/integración) de `decidir()` (pura, se prueba con PBT) es la decisión clave de diseño para que el Requisito 1 sea testeable como property sin depender de hardware real.
 
-Reglas de `decidir()` (derivadas de 1.3, 1.4, 1.5, 1.7, 1.8, 10.6), evaluadas en este orden de precedencia:
+Reglas de `decidir()` para `motorSeleccionado`/`capacidadesFaltantes` (derivadas de 1.3, 1.4, 1.5, 1.7, 1.8, 10.6), evaluadas en este orden de precedencia:
 1. Si `memoriaGB !== null && memoriaGB < 4` → `motorSeleccionado = "ninguno"`, `capacidadesFaltantes` incluye `"memoria"`.
 2. Si `webgpuDisponible` → `motorSeleccionado = "webgpu"` (siempre que la memoria sea suficiente).
 3. Si no `webgpuDisponible` pero `wasmDisponible` → `motorSeleccionado = "wasm"` (siempre que la memoria sea suficiente).
 4. Si ninguno de los dos está disponible → `motorSeleccionado = "ninguno"`, `capacidadesFaltantes` incluye `"webgpu"` y `"wasm"`.
+
+Regla de `decidir()` para `nivelModelo` (Requisito 1.9, 1.10), independiente de la anterior:
+`nivelModelo = "compacto"` si `esDispositivoMovil` **o** `memoriaGB !== null && memoriaGB < 8`; en cualquier otro caso, `"completo"`.
+
+**Motivación y umbral de 8 GB.** El modelo completo (`Llama-3.2-3B-Instruct-q4f16_1-MLC`) requiere
+~2.26 GB de VRAM según el catálogo de WebLLM. `navigator.deviceMemory` reporta la memoria del
+dispositivo cuantizada a potencias de 2 y con un tope de 8, por lo que un celular típico informa
+los mismos 4 u 8 GB que una notebook modesta: ese valor por sí solo no alcanza para descartar un
+celular con el umbral de 4 GB del Modo_Degradado (criterio 1.8). Sin un segundo gate, un celular
+pasaba la verificación de compatibilidad y el Motor_Inferencia intentaba cargar 2.26 GB en el
+proceso del navegador — en Chrome Android esto agota la memoria del proceso *renderer* y el
+sistema operativo lo mata sin lanzar una excepción de JavaScript, por lo que el `try/catch` que
+activa Modo_Degradado nunca llega a ejecutarse: la pestaña simplemente se cierra. `nivelModelo`
+resuelve esto seleccionando el modelo compacto (`Llama-3.2-1B-Instruct-q4f16_1-MLC`, ~0.88 GB de
+VRAM) en dispositivos móviles o que reportan menos del tope máximo de memoria, sin depender de una
+señal de memoria que en el navegador es demasiado imprecisa como único criterio.
 
 ### Motor_Inferencia
 
@@ -211,7 +238,10 @@ type EventoGeneracion =
 function reducirGeneracion(estado: EstadoGeneracion, evento: EventoGeneracion): EstadoGeneracion;
 
 interface MotorInferencia {
-  inicializar(motor: "webgpu" | "wasm"): Promise<void>;
+  // `modeloId` se recibe recién acá (no en construcción) porque depende de
+  // `nivelModelo`, resuelto por Detector_Compatibilidad.decidir() después de
+  // que la instancia de MotorInferencia ya existe (Requisito 1.9, 1.10).
+  inicializar(motor: "webgpu" | "wasm", modeloId: string): Promise<void>;
   generar(historial: Mensaje[]): AsyncIterable<string>; // yields fragmentos de texto
   cancelar(): void;
 }

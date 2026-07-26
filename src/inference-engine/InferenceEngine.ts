@@ -174,7 +174,14 @@ function mapHistoryToOpenAi(history: Message[]): OpenAiMessage[] {
 
 /** Own InferenceEngine interface (see design.md, "Motor_Inferencia" section). */
 export interface InferenceEngine {
-  initialize(engine: "webgpu" | "wasm"): Promise<void>;
+  /**
+   * `modelId` is passed here rather than fixed at construction time because
+   * it depends on `decide()`'s `modelTier` (`configuration.ts`,
+   * `modelIdForTier`), only known once the boot sequence's compatibility
+   * detection has run -- after the `InferenceEngine` instance already
+   * exists (see `AppStateProvider.tsx`).
+   */
+  initialize(engine: "webgpu" | "wasm", modelId: string): Promise<void>;
   generate(history: Message[]): AsyncIterable<string>;
   cancel(): void;
 }
@@ -189,27 +196,24 @@ export interface InferenceEngine {
  */
 export class InferenceEngineWebLLM implements InferenceEngine {
   private mlcEngine: MlcEngine | null = null;
-  private readonly modelId: string;
   private readonly engineFactory: MlcEngineFactory;
   private readonly onInitializationProgress: ((report: InitializationProgressReport) => void) | undefined;
 
   constructor(
-    modelId: string,
     engineFactory: MlcEngineFactory,
     onInitializationProgress?: (report: InitializationProgressReport) => void,
   ) {
-    this.modelId = modelId;
     this.engineFactory = engineFactory;
     this.onInitializationProgress = onInitializationProgress;
   }
 
-  async initialize(engine: "webgpu" | "wasm"): Promise<void> {
+  async initialize(engine: "webgpu" | "wasm", modelId: string): Promise<void> {
     const options: MlcEngineFactoryOptions =
       this.onInitializationProgress !== undefined
         ? { onProgress: this.onInitializationProgress }
         : {};
     try {
-      this.mlcEngine = await this.engineFactory(this.modelId, engine, options);
+      this.mlcEngine = await this.engineFactory(modelId, engine, options);
     } catch (error) {
       throw new EngineInitializationError(classifyInitializationError(error), error);
     }

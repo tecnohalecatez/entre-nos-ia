@@ -79,6 +79,7 @@ const ANY_PROBE: DecideInput = {
   webgpuAvailable: true,
   wasmAvailable: true,
   memoryGB: 8,
+  isMobileDevice: false,
 };
 
 const RESULT_WITH_ENGINE: CompatibilityResult = {
@@ -87,6 +88,7 @@ const RESULT_WITH_ENGINE: CompatibilityResult = {
   memoryGB: 8,
   selectedEngine: "webgpu",
   missingCapabilities: [],
+  modelTier: "full",
 };
 
 /**

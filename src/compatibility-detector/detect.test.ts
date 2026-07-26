@@ -108,4 +108,64 @@ describe("detect", () => {
       expect(result.memoryGB).toBeNull();
     });
   });
+
+  describe("mobile-device probe (Requirement 1, model tier)", () => {
+    it("reports isMobileDevice true from navigator.userAgentData.mobile when available (Chromium)", async () => {
+      vi.stubGlobal("navigator", {
+        gpu: undefined,
+        deviceMemory: 8,
+        userAgentData: { mobile: true },
+        userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)", // ignored: userAgentData takes precedence
+      });
+
+      const result = await detect();
+
+      expect(result.isMobileDevice).toBe(true);
+    });
+
+    it("reports isMobileDevice false from navigator.userAgentData.mobile when available and false", async () => {
+      vi.stubGlobal("navigator", {
+        gpu: undefined,
+        deviceMemory: 8,
+        userAgentData: { mobile: false },
+      });
+
+      const result = await detect();
+
+      expect(result.isMobileDevice).toBe(false);
+    });
+
+    it("falls back to a User-Agent string check when userAgentData is not exposed (e.g. Safari/iOS)", async () => {
+      vi.stubGlobal("navigator", {
+        gpu: undefined,
+        deviceMemory: undefined,
+        userAgent:
+          "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+      });
+
+      const result = await detect();
+
+      expect(result.isMobileDevice).toBe(true);
+    });
+
+    it("reports isMobileDevice false on a desktop User-Agent with neither userAgentData nor deviceMemory", async () => {
+      vi.stubGlobal("navigator", {
+        gpu: undefined,
+        deviceMemory: undefined,
+        userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko)",
+      });
+
+      const result = await detect();
+
+      expect(result.isMobileDevice).toBe(false);
+    });
+
+    it("reports isMobileDevice false when neither userAgentData nor userAgent is exposed", async () => {
+      vi.stubGlobal("navigator", { gpu: undefined, deviceMemory: 8 });
+
+      const result = await detect();
+
+      expect(result.isMobileDevice).toBe(false);
+    });
+  });
 });

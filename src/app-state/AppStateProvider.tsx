@@ -17,7 +17,8 @@
 // (see `InferenceEngine.ts` and `src/app-state/configuration.ts`), covering
 // Requirements 2.1, 2.3 and 2.5 without needing our own download/checksum
 // pipeline against a single-file URL (WebLLM splits the weights into shards
-// resolved internally from `MODEL_ID`). The prop still exists as an
+// resolved internally from the model id, chosen per `modelIdForTier()`).
+// The prop still exists as an
 // injection point for tests (or for a future in-house download pipeline if
 // the project were to ever host its own weights).
 //
@@ -54,7 +55,7 @@ import { useNotification } from "../notification/useNotification";
 import { AppStateContext } from "./context";
 import type { DegradedModeCause } from "./degradedMode";
 import { causeFromIncompatibility, degradedModeMessage } from "./degradedMode";
-import { MODEL_ID } from "./configuration";
+import { modelIdForTier } from "./configuration";
 
 export interface AppStateProviderProps {
   children: ReactNode;
@@ -64,7 +65,7 @@ export interface AppStateProviderProps {
    */
   detectFn?: typeof detect;
   decideFn?: typeof decide;
-  createInferenceEngine?: (modelId: string) => InferenceEngine;
+  createInferenceEngine?: () => InferenceEngine;
   createConversationManager?: () => ConversationManager;
   /**
    * Defaults to `createDefaultModelDownloadManager()` (real fetch/Cache
@@ -96,8 +97,8 @@ const deferredMlcEngineFactory: MlcEngineFactory = async (modelId, engine, optio
   return createDefaultMlcEngineFactory(CreateMLCEngine)(modelId, engine, options);
 };
 
-function createDefaultInferenceEngine(modelId: string): InferenceEngine {
-  return new InferenceEngineWebLLM(modelId, deferredMlcEngineFactory);
+function createDefaultInferenceEngine(): InferenceEngine {
+  return new InferenceEngineWebLLM(deferredMlcEngineFactory);
 }
 
 function createDefaultConversationManager(): ConversationManager {
@@ -142,7 +143,7 @@ export function AppStateProvider({
     type: "idle",
   } as GenerationState);
 
-  const inferenceEngine = useMemo(() => createInferenceEngine(MODEL_ID), [createInferenceEngine]);
+  const inferenceEngine = useMemo(() => createInferenceEngine(), [createInferenceEngine]);
   const conversationManager = useMemo(
     () => createConversationManager(),
     [createConversationManager],
@@ -271,10 +272,13 @@ export function AppStateProvider({
       }
 
       // 3. Inference_Engine initialization (4.1, 8.1, 8.5). WebLLM
-      // downloads and internally caches the weight shards for MODEL_ID the
-      // first time it's called here (2.1, 2.3, 2.5).
+      // downloads and internally caches the weight shards for the resolved
+      // model id the first time it's called here (2.1, 2.3, 2.5). The model
+      // id depends on `result.modelTier` (Requirement 1: a full-size model
+      // reliably OOM-crashes memory-constrained devices such as phones, see
+      // `configuration.ts`).
       try {
-        await inferenceEngine.initialize(result.selectedEngine);
+        await inferenceEngine.initialize(result.selectedEngine, modelIdForTier(result.modelTier));
       } catch (error) {
         if (isCancelled(controller.signal)) {
           return;

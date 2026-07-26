@@ -23,6 +23,7 @@ import { EngineInitializationError } from "../inference-engine/InferenceEngine";
 import type { InferenceEngine } from "../inference-engine/InferenceEngine";
 import type { DecideInput, CompatibilityResult } from "../compatibility-detector/decide";
 import { decide } from "../compatibility-detector/decide";
+import { MODEL_ID_FULL, MODEL_ID_COMPACT } from "./configuration";
 import { ModelDownloadError } from "../model-download-manager/ensureModelAvailable";
 import type { ModelDownloadManager } from "../model-download-manager/ensureModelAvailable";
 import type { AppStateProviderProps } from "./AppStateProvider";
@@ -58,6 +59,7 @@ const ANY_PROBE: DecideInput = {
   webgpuAvailable: true,
   wasmAvailable: true,
   memoryGB: 8,
+  isMobileDevice: false,
 };
 
 /** Test helper component: exposes the context state as rendered text. */
@@ -110,6 +112,7 @@ describe("AppStateProvider - Degraded_Mode activation", () => {
         memoryGB: 8,
         selectedEngine: "none",
         missingCapabilities: ["webgpu", "wasm"],
+        modelTier: "full",
       }),
     );
 
@@ -130,6 +133,7 @@ describe("AppStateProvider - Degraded_Mode activation", () => {
         memoryGB: 2,
         selectedEngine: "none",
         missingCapabilities: ["memory"],
+        modelTier: "full",
       }),
     );
 
@@ -149,6 +153,7 @@ describe("AppStateProvider - Degraded_Mode activation", () => {
         memoryGB: 8,
         selectedEngine: "webgpu",
         missingCapabilities: [],
+        modelTier: "full",
       }),
     );
     const { inferenceEngine, initialize } = createFakeInferenceEngine();
@@ -160,7 +165,28 @@ describe("AppStateProvider - Degraded_Mode activation", () => {
     });
     expect(screen.getByTestId("degraded-mode").textContent).toBe("null");
     expect(screen.getByTestId("loading").textContent).toBe("false");
-    expect(initialize).toHaveBeenCalledWith("webgpu");
+    expect(initialize).toHaveBeenCalledWith("webgpu", MODEL_ID_FULL);
+  });
+
+  it("initializes with MODEL_ID_COMPACT when decide() reports modelTier 'compact' (Requirement 1: avoids OOM-crashing memory-constrained devices)", async () => {
+    const decideFn = vi.fn(
+      (): CompatibilityResult => ({
+        webgpuAvailable: true,
+        wasmAvailable: false,
+        memoryGB: 4,
+        selectedEngine: "webgpu",
+        missingCapabilities: [],
+        modelTier: "compact",
+      }),
+    );
+    const { inferenceEngine, initialize } = createFakeInferenceEngine();
+
+    renderWithProviders({ decideFn, createInferenceEngine: () => inferenceEngine });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("engine-ready").textContent).toBe("true");
+    });
+    expect(initialize).toHaveBeenCalledWith("webgpu", MODEL_ID_COMPACT);
   });
 
   it("activates Degraded_Mode with cause insufficient_memory when engine initialization fails due to OOM (8.1)", async () => {
@@ -171,6 +197,7 @@ describe("AppStateProvider - Degraded_Mode activation", () => {
         memoryGB: 8,
         selectedEngine: "webgpu",
         missingCapabilities: [],
+        modelTier: "full",
       }),
     );
     const { inferenceEngine } = createFakeInferenceEngine({
@@ -194,6 +221,7 @@ describe("AppStateProvider - Degraded_Mode activation", () => {
         memoryGB: 8,
         selectedEngine: "webgpu",
         missingCapabilities: [],
+        modelTier: "full",
       }),
     );
     const { inferenceEngine } = createFakeInferenceEngine({
@@ -218,6 +246,7 @@ describe("AppStateProvider - Degraded_Mode activation", () => {
         memoryGB: 8,
         selectedEngine: "webgpu",
         missingCapabilities: [],
+        modelTier: "full",
       }),
     );
     const { inferenceEngine } = createFakeInferenceEngine({
@@ -242,6 +271,7 @@ describe("AppStateProvider - Degraded_Mode activation", () => {
         memoryGB: 8,
         selectedEngine: "webgpu",
         missingCapabilities: [],
+        modelTier: "full",
       }),
     );
     const { inferenceEngine } = createFakeInferenceEngine({
@@ -266,6 +296,7 @@ describe("AppStateProvider - Degraded_Mode activation", () => {
         memoryGB: 8,
         selectedEngine: "webgpu",
         missingCapabilities: [],
+        modelTier: "full",
       }),
     );
     const { inferenceEngine, initialize } = createFakeInferenceEngine();
@@ -291,6 +322,7 @@ describe("AppStateProvider - Degraded_Mode activation", () => {
         memoryGB: 8,
         selectedEngine: "webgpu",
         missingCapabilities: [],
+        modelTier: "full",
       }),
     );
     const { inferenceEngine } = createFakeInferenceEngine();
@@ -315,6 +347,7 @@ describe("AppStateProvider - Degraded_Mode activation", () => {
         memoryGB: 8,
         selectedEngine: "none",
         missingCapabilities: ["webgpu", "wasm"],
+        modelTier: "full",
       }),
     );
 
@@ -358,6 +391,7 @@ describe("AppStateProvider - block initial load when offline (3.5)", () => {
       memoryGB: 8,
       selectedEngine: "webgpu",
       missingCapabilities: [],
+      modelTier: "full",
     }),
   );
 
@@ -412,6 +446,7 @@ describe("AppStateProvider - model download/caching delegated to WebLLM by defau
         memoryGB: 8,
         selectedEngine: "webgpu",
         missingCapabilities: [],
+        modelTier: "full",
       }),
     );
     const { inferenceEngine, initialize } = createFakeInferenceEngine();
@@ -441,7 +476,7 @@ describe("AppStateProvider - model download/caching delegated to WebLLM by defau
       expect(screen.getByTestId("engine-ready").textContent).toBe("true");
     });
     expect(screen.getByTestId("degraded-mode").textContent).toBe("null");
-    expect(initialize).toHaveBeenCalledWith("webgpu");
+    expect(initialize).toHaveBeenCalledWith("webgpu", MODEL_ID_FULL);
     expect(fetchMock).not.toHaveBeenCalled();
 
     vi.unstubAllGlobals();
@@ -455,6 +490,7 @@ describe("AppStateProvider - model download/caching delegated to WebLLM by defau
         memoryGB: 8,
         selectedEngine: "webgpu",
         missingCapabilities: [],
+        modelTier: "full",
       }),
     );
     const { inferenceEngine } = createFakeInferenceEngine({

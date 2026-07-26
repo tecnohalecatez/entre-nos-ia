@@ -60,11 +60,16 @@ En cada push a la rama configurada, Amplify ejecuta el build spec definido en `a
 (raíz del repo):
 
 ```bash
+nvm install 22
+nvm use 22
 npm ci
 npm run lint
 npm run test
 npm run build
 ```
+
+Los pasos `nvm` fijan explícitamente Node 22, ya que Vite 8 requiere Node 20.19+ o 22.12+ y la
+versión por defecto de la imagen de compilación de Amplify no está garantizada.
 
 Si `lint`, `test` o `build` fallan, el despliegue se aborta y la versión previamente publicada
 sigue disponible para los usuarios. Los artifacts publicados son el contenido de `dist/`.

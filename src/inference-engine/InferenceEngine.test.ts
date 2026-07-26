@@ -42,9 +42,9 @@ describe("InferenceEngineWebLLM.initialize", () => {
   it("resolves without throwing when the engine factory initializes successfully", async () => {
     const { engine } = createFakeMlcEngine([]);
     const engineFactory: MlcEngineFactory = vi.fn().mockResolvedValue(engine);
-    const inferenceEngine = new InferenceEngineWebLLM("test-model", engineFactory);
+    const inferenceEngine = new InferenceEngineWebLLM(engineFactory);
 
-    await expect(inferenceEngine.initialize("webgpu")).resolves.toBeUndefined();
+    await expect(inferenceEngine.initialize("webgpu", "test-model")).resolves.toBeUndefined();
     expect(engineFactory).toHaveBeenCalledWith("test-model", "webgpu", {});
   });
 
@@ -52,9 +52,9 @@ describe("InferenceEngineWebLLM.initialize", () => {
     const originalError = new Error("device lost");
     originalError.name = "DeviceLostError";
     const engineFactory: MlcEngineFactory = vi.fn().mockRejectedValue(originalError);
-    const inferenceEngine = new InferenceEngineWebLLM("test-model", engineFactory);
+    const inferenceEngine = new InferenceEngineWebLLM(engineFactory);
 
-    await expect(inferenceEngine.initialize("webgpu")).rejects.toSatisfy((error: unknown) => {
+    await expect(inferenceEngine.initialize("webgpu", "test-model")).rejects.toSatisfy((error: unknown) => {
       expect(error).toBeInstanceOf(EngineInitializationError);
       expect((error as EngineInitializationError).cause).toBe("insufficient_memory");
       expect((error as EngineInitializationError).originalCause).toBe(originalError);
@@ -65,9 +65,9 @@ describe("InferenceEngineWebLLM.initialize", () => {
   it("rejects with EngineInitializationError(cause='insufficient_memory') on an out of memory message (Requisito 8.1)", async () => {
     const originalError = new Error("Out of memory while allocating buffer");
     const engineFactory: MlcEngineFactory = vi.fn().mockRejectedValue(originalError);
-    const inferenceEngine = new InferenceEngineWebLLM("test-model", engineFactory);
+    const inferenceEngine = new InferenceEngineWebLLM(engineFactory);
 
-    await expect(inferenceEngine.initialize("wasm")).rejects.toSatisfy((error: unknown) => {
+    await expect(inferenceEngine.initialize("wasm", "test-model")).rejects.toSatisfy((error: unknown) => {
       expect(error).toBeInstanceOf(EngineInitializationError);
       expect((error as EngineInitializationError).cause).toBe("insufficient_memory");
       return true;
@@ -77,9 +77,9 @@ describe("InferenceEngineWebLLM.initialize", () => {
   it("rejects with EngineInitializationError(cause='network_error') on a fetch failure (Requisito 8.5)", async () => {
     const originalError = new Error("Failed to fetch");
     const engineFactory: MlcEngineFactory = vi.fn().mockRejectedValue(originalError);
-    const inferenceEngine = new InferenceEngineWebLLM("test-model", engineFactory);
+    const inferenceEngine = new InferenceEngineWebLLM(engineFactory);
 
-    await expect(inferenceEngine.initialize("webgpu")).rejects.toSatisfy((error: unknown) => {
+    await expect(inferenceEngine.initialize("webgpu", "test-model")).rejects.toSatisfy((error: unknown) => {
       expect(error).toBeInstanceOf(EngineInitializationError);
       expect((error as EngineInitializationError).cause).toBe("network_error");
       expect((error as EngineInitializationError).originalCause).toBe(originalError);
@@ -90,9 +90,9 @@ describe("InferenceEngineWebLLM.initialize", () => {
   it("rejects with EngineInitializationError(cause='other_cause') on a generic unclassifiable error (Requisito 8.5)", async () => {
     const originalError = new Error("unexpected worker crash");
     const engineFactory: MlcEngineFactory = vi.fn().mockRejectedValue(originalError);
-    const inferenceEngine = new InferenceEngineWebLLM("test-model", engineFactory);
+    const inferenceEngine = new InferenceEngineWebLLM(engineFactory);
 
-    await expect(inferenceEngine.initialize("webgpu")).rejects.toSatisfy((error: unknown) => {
+    await expect(inferenceEngine.initialize("webgpu", "test-model")).rejects.toSatisfy((error: unknown) => {
       expect(error).toBeInstanceOf(EngineInitializationError);
       expect((error as EngineInitializationError).cause).toBe("other_cause");
       expect((error as EngineInitializationError).originalCause).toBe(originalError);
@@ -112,8 +112,8 @@ describe("InferenceEngineWebLLM.generate", () => {
     ];
     const { engine, create } = createFakeMlcEngine(simulatedChunks);
     const engineFactory: MlcEngineFactory = vi.fn().mockResolvedValue(engine);
-    const inferenceEngine = new InferenceEngineWebLLM("test-model", engineFactory);
-    await inferenceEngine.initialize("webgpu");
+    const inferenceEngine = new InferenceEngineWebLLM(engineFactory);
+    await inferenceEngine.initialize("webgpu", "test-model");
 
     const history: Message[] = [createMessage("user", "hola")];
     const received: string[] = [];
@@ -137,8 +137,8 @@ describe("InferenceEngineWebLLM.generate", () => {
   it("prefixes the system prompt exactly once, even with a multi-turn history", async () => {
     const { engine, create } = createFakeMlcEngine([]);
     const engineFactory: MlcEngineFactory = vi.fn().mockResolvedValue(engine);
-    const inferenceEngine = new InferenceEngineWebLLM("test-model", engineFactory);
-    await inferenceEngine.initialize("webgpu");
+    const inferenceEngine = new InferenceEngineWebLLM(engineFactory);
+    await inferenceEngine.initialize("webgpu", "test-model");
 
     const history: Message[] = [
       createMessage("user", "hola", 1),
@@ -156,16 +156,16 @@ describe("InferenceEngineWebLLM.generate", () => {
 
   it("throws if invoked before initialize() has successfully finished", () => {
     const engineFactory: MlcEngineFactory = vi.fn();
-    const inferenceEngine = new InferenceEngineWebLLM("test-model", engineFactory);
+    const inferenceEngine = new InferenceEngineWebLLM(engineFactory);
 
     expect(() => inferenceEngine.generate([createMessage("user", "hola")])).toThrow();
   });
 
   it("throws if initialize() previously failed (mlcEngine remains null)", async () => {
     const engineFactory: MlcEngineFactory = vi.fn().mockRejectedValue(new Error("network error"));
-    const inferenceEngine = new InferenceEngineWebLLM("test-model", engineFactory);
+    const inferenceEngine = new InferenceEngineWebLLM(engineFactory);
 
-    await expect(inferenceEngine.initialize("webgpu")).rejects.toBeInstanceOf(EngineInitializationError);
+    await expect(inferenceEngine.initialize("webgpu", "test-model")).rejects.toBeInstanceOf(EngineInitializationError);
     expect(() => inferenceEngine.generate([createMessage("user", "hola")])).toThrow();
   });
 });
@@ -174,8 +174,8 @@ describe("InferenceEngineWebLLM.cancel", () => {
   it("invokes the underlying engine's interruptGenerate() after a successful initialization", async () => {
     const { engine, interruptGenerate } = createFakeMlcEngine([]);
     const engineFactory: MlcEngineFactory = vi.fn().mockResolvedValue(engine);
-    const inferenceEngine = new InferenceEngineWebLLM("test-model", engineFactory);
-    await inferenceEngine.initialize("webgpu");
+    const inferenceEngine = new InferenceEngineWebLLM(engineFactory);
+    await inferenceEngine.initialize("webgpu", "test-model");
 
     inferenceEngine.cancel();
 
@@ -184,7 +184,7 @@ describe("InferenceEngineWebLLM.cancel", () => {
 
   it("does not throw when called before initialize() (no-op)", () => {
     const engineFactory: MlcEngineFactory = vi.fn();
-    const inferenceEngine = new InferenceEngineWebLLM("test-model", engineFactory);
+    const inferenceEngine = new InferenceEngineWebLLM(engineFactory);
 
     expect(() => {
       inferenceEngine.cancel();

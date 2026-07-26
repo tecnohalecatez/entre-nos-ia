@@ -120,17 +120,25 @@ async function resolveModelRequest(request: Request): Promise<Response> {
 // --- Update lifecycle (Requisito 9, task 9.6) ---
 
 /**
- * Model version that this build of the Service_Worker_App requires.
+ * Model set that this build of the Service_Worker_App requires.
  *
  * DESIGN NOTE: in the absence of a build-level model versioning pipeline,
- * this is fixed here as a source constant (identifier of the model
+ * this is fixed here as a source constant (identifier of the model set
  * supported by this app version, see `MetadatosModeloCacheado` in
- * design.md). If in the future the required model varies between builds,
+ * design.md). If in the future the required models vary between builds,
  * this value should be injected via Vite's `define` at build time; the rest
  * of the flow (`manageModelCacheVersion`, `shouldPurgeModelCache`) would not
  * need to change.
+ *
+ * Since the app loads one of two models depending on device capability
+ * (`MODEL_ID_FULL`/`MODEL_ID_COMPACT` in `src/app-state/configuration.ts`,
+ * Requirement 1), this identifies the *set* the build supports rather than
+ * a single model: it must change whenever that set changes (so
+ * `shouldPurgeModelCache` still purges stale weights on a real model-set
+ * change), but must NOT vary per device/tier -- doing so would purge
+ * Cache_Modelo on every activation for devices on the compact tier.
  */
-const REQUIRED_MODEL_VERSION = "Llama-3.2-3B-Instruct-q4f16_1";
+const REQUIRED_MODEL_VERSION = "llama-3.2-3b+1b-q4f16_1";
 
 /** Small cache name used only to persist the active model version marker. */
 const MODEL_CACHE_METADATA_NAME = "model-cache-metadata";
