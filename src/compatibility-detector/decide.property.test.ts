@@ -16,10 +16,11 @@ describe("decide - property test", () => {
           wasmAvailable: fc.boolean(),
           memoryGB: fc.option(fc.integer({ min: 0, max: 32 })),
           isMobileDevice: fc.boolean(),
+          shaderF16Available: fc.boolean(),
         }),
         (input) => {
           const result = decide(input);
-          const { webgpuAvailable, wasmAvailable, memoryGB, isMobileDevice } = input;
+          const { webgpuAvailable, wasmAvailable, memoryGB, isMobileDevice, shaderF16Available } = input;
 
           const enoughMemory = memoryGB === null || memoryGB >= 4;
 
@@ -58,6 +59,11 @@ describe("decide - property test", () => {
           // Independent of selectedEngine/missingCapabilities precedence.
           const expectsCompactTier = isMobileDevice || (memoryGB !== null && memoryGB < 8);
           expect(result.modelTier).toBe(expectsCompactTier ? "compact" : "full");
+
+          // shaderF16Available is a pure pass-through: it must never affect
+          // selectedEngine/missingCapabilities/modelTier (there's always a
+          // fallback model variant, so it's never a blocking incompatibility).
+          expect(result.shaderF16Available).toBe(shaderF16Available);
         },
       ),
       { numRuns: 100 },

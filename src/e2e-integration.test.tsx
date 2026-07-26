@@ -152,6 +152,7 @@ const ANY_PROBE: DecideInput = {
   wasmAvailable: true,
   memoryGB: 8,
   isMobileDevice: false,
+  shaderF16Available: true,
 };
 
 const WEBGPU_RESULT: CompatibilityResult = {
@@ -161,6 +162,7 @@ const WEBGPU_RESULT: CompatibilityResult = {
   selectedEngine: "webgpu",
   missingCapabilities: [],
   modelTier: "full",
+  shaderF16Available: true,
 };
 
 const WASM_RESULT: CompatibilityResult = {
@@ -170,6 +172,7 @@ const WASM_RESULT: CompatibilityResult = {
   selectedEngine: "wasm",
   missingCapabilities: [],
   modelTier: "full",
+  shaderF16Available: true,
 };
 
 /** Types `text` into `MessageInput`'s real `textarea` and clicks "Enviar". */

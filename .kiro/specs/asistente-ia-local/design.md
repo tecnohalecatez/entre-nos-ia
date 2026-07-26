@@ -162,6 +162,7 @@ interface ResultadoCompatibilidad {
   motorSeleccionado: "webgpu" | "wasm" | "ninguno";
   capacidadesFaltantes: string[]; // p.ej. ["webgpu", "wasm"] o ["memoria"]
   nivelModelo: "completo" | "compacto"; // Requisito 1.9/1.10
+  soporteShaderF16: boolean; // Requisito 1.11/1.12; pass-through, no bloqueante
 }
 
 interface DetectorCompatibilidad {
@@ -171,6 +172,7 @@ interface DetectorCompatibilidad {
     wasmDisponible: boolean;
     memoriaGB: number | null;
     esDispositivoMovil: boolean;
+    soporteShaderF16: boolean;
   }>;
   // Función PURA: dado el resultado de los sondeos, decide motor, modo degradado y nivel de modelo.
   // Esta es la función que se somete a property-based testing (Property 1).
@@ -179,6 +181,7 @@ interface DetectorCompatibilidad {
     wasmDisponible: boolean;
     memoriaGB: number | null;
     esDispositivoMovil: boolean;
+    soporteShaderF16: boolean;
   }): ResultadoCompatibilidad;
 }
 ```
@@ -206,6 +209,37 @@ activa Modo_Degradado nunca llega a ejecutarse: la pestaña simplemente se cierr
 resuelve esto seleccionando el modelo compacto (`Llama-3.2-1B-Instruct-q4f16_1-MLC`, ~0.88 GB de
 VRAM) en dispositivos móviles o que reportan menos del tope máximo de memoria, sin depender de una
 señal de memoria que en el navegador es demasiado imprecisa como único criterio.
+
+**`soporteShaderF16` y la matriz de variantes de modelo.** Todo el catálogo pre-construido de
+WebLLM que usa el Sistema (`q4f16_1`) declara `required_features: ["shader-f16"]`: es la única
+feature requerida en todo el catálogo. `shader-f16` es una extensión **opcional** de WebGPU
+(shaders con floats de 16 bits) que muchos GPU/drivers de Android (Adreno, Mali) no exponen aunque
+sí soporten WebGPU básico. Cuando falta, WebLLM rechaza la inicialización con
+`ShaderF16SupportError` **antes de descargar ningún peso** (chequea
+`adapter.features.has("shader-f16")` contra los `required_features` del modelo). Por eso
+`detectar()` sondea esta capacidad sobre el mismo `adapter` que ya obtiene para `webgpuDisponible`
+(sin una segunda llamada a `requestAdapter()`), y `decidir()` la expone como pass-through puro en
+`ResultadoCompatibilidad` (no afecta `motorSeleccionado`/`capacidadesFaltantes`/`nivelModelo`: no
+es una incompatibilidad bloqueante, hay una variante de modelo que no la requiere).
+
+La resolución final del modelo a cargar es una matriz 2×2 independiente — tamaño (`nivelModelo`) ×
+cuantización (`soporteShaderF16`) — resuelta en `configuration.ts` (`modelIdForTier`), no en
+`decidir()`:
+
+| `nivelModelo` | `soporteShaderF16` | Modelo cargado | VRAM aprox. |
+|---|---|---|---|
+| `completo` | `true` | `Llama-3.2-3B-Instruct-q4f16_1-MLC` | 2.26 GB |
+| `completo` | `false` | `Llama-3.2-3B-Instruct-q4f32_1-MLC` | 2.95 GB |
+| `compacto` | `true` | `Llama-3.2-1B-Instruct-q4f16_1-MLC` | 0.88 GB |
+| `compacto` | `false` | `Llama-3.2-1B-Instruct-q4f32_1-MLC` | 1.13 GB |
+
+Las 4 variantes son de la misma familia y comparten chat template, así que `SYSTEM_PROMPT` y el
+resto del comportamiento del Sistema no cambian según cuál se cargue.
+
+Como red de seguridad (por si un modelo futuro requiriera otra `required_feature` no sondeada
+proactivamente), `Motor_Inferencia.classifyInitializationError` también clasifica
+`ShaderF16SupportError`/`FeatureSupportError` como una causa específica
+(`unsupported_gpu_feature`), con un mensaje de Modo_Degradado accionable en vez del genérico.
 
 ### Motor_Inferencia
 
@@ -502,6 +536,7 @@ La estrategia general es: **todo fallo se traduce en un mensaje visible y accion
 | Carga offline sin cache previo (3.5) | `decidirFuenteRespuesta` → `"sin-respuesta"` | Bloquear acceso a Interfaz_Chat, mensaje pidiendo conexión inicial |
 | Error durante generación de respuesta (8.2) | Excepción/rechazo dentro de `MotorInferencia.generar` | `reducirGeneracion` transiciona a `"error"`; se descarta texto parcial, se conserva mensaje de usuario, se ofrece reintento |
 | Fallo de inicialización del motor por memoria (8.1) | Excepción de `MLCEngine.reload` clasificada como OOM | Mensaje específico de memoria insuficiente + Modo_Degradado |
+| Fallo de inicialización del motor por GPU sin `shader-f16` (1.11, 1.12, red de seguridad) | `ShaderF16SupportError`/`FeatureSupportError`, si el sondeo proactivo de `soporteShaderF16` no lo evitó | Mensaje específico ("GPU no soporta una función gráfica necesaria") + Modo_Degradado |
 | Fallo de inicialización del motor por otra causa (8.5) | Cualquier otra excepción de inicialización | Mensaje genérico de fallo de inicialización + Modo_Degradado |
 | Fallo de escritura al exportar (7.2) | Excepción de la API de descarga de archivos | Informar error, no se genera archivo parcial (se escribe solo tras serializar completamente en memoria) |
 | Importación de archivo inválido (7.4) | `parsearImportacion` retorna `ok: false` | Mensaje de error específico (`json_invalido` \| `esquema_invalido`), Almacen_Conversaciones sin cambios |

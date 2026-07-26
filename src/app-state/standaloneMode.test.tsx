@@ -82,6 +82,7 @@ describe("AppStateProvider - functional equivalence in Standalone_Mode (11.4, 11
     wasmAvailable: true,
     memoryGB: 8,
     isMobileDevice: false,
+    shaderF16Available: true,
   };
   const RESULT_WITH_ENGINE: CompatibilityResult = {
     webgpuAvailable: true,
@@ -90,6 +91,7 @@ describe("AppStateProvider - functional equivalence in Standalone_Mode (11.4, 11
     selectedEngine: "webgpu",
     missingCapabilities: [],
     modelTier: "full",
+    shaderF16Available: true,
   };
 
   function EngineReadyAndStandaloneModeProbe() {

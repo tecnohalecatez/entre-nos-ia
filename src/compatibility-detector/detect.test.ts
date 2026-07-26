@@ -5,6 +5,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { detect } from "./detect";
 
+/** Fake `GPUAdapter`, mirroring the real WebGPU shape `probeWebgpu()` reads (`adapter.features.has(...)`). */
+function createFakeAdapter(supportedFeatures: string[] = []): { features: { has(name: string): boolean } } {
+  return { features: { has: (name: string) => supportedFeatures.includes(name) } };
+}
+
 describe("detect", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -13,7 +18,7 @@ describe("detect", () => {
 
   it("reports webgpuAvailable true when requestAdapter resolves an adapter", async () => {
     vi.stubGlobal("navigator", {
-      gpu: { requestAdapter: () => Promise.resolve({}) },
+      gpu: { requestAdapter: () => Promise.resolve(createFakeAdapter(["shader-f16"])) },
       deviceMemory: 8,
     });
 
@@ -78,6 +83,50 @@ describe("detect", () => {
       const result = await detect();
 
       expect(result.webgpuAvailable).toBe(false);
+    });
+  });
+
+  describe("shader-f16 probe (Requirement 1, model quantization variant)", () => {
+    it("reports shaderF16Available true when the adapter supports the shader-f16 extension", async () => {
+      vi.stubGlobal("navigator", {
+        gpu: { requestAdapter: () => Promise.resolve(createFakeAdapter(["shader-f16"])) },
+        deviceMemory: 8,
+      });
+
+      const result = await detect();
+
+      expect(result.shaderF16Available).toBe(true);
+    });
+
+    it("reports shaderF16Available false when the adapter exists but doesn't support shader-f16 (common on Android GPU drivers)", async () => {
+      vi.stubGlobal("navigator", {
+        gpu: { requestAdapter: () => Promise.resolve(createFakeAdapter([])) },
+        deviceMemory: 8,
+      });
+
+      const result = await detect();
+
+      expect(result.webgpuAvailable).toBe(true);
+      expect(result.shaderF16Available).toBe(false);
+    });
+
+    it("reports shaderF16Available false when requestAdapter resolves null (no adapter to read features from)", async () => {
+      vi.stubGlobal("navigator", {
+        gpu: { requestAdapter: () => Promise.resolve(null) },
+        deviceMemory: 8,
+      });
+
+      const result = await detect();
+
+      expect(result.shaderF16Available).toBe(false);
+    });
+
+    it("reports shaderF16Available false when navigator.gpu does not exist", async () => {
+      vi.stubGlobal("navigator", { gpu: undefined, deviceMemory: 8 });
+
+      const result = await detect();
+
+      expect(result.shaderF16Available).toBe(false);
     });
   });
 

@@ -15,17 +15,31 @@
 import type { ModelTier } from "../compatibility-detector/decide";
 
 /**
- * Full-size model, used on desktop-class devices (`modelTier === "full"`).
- * `vram_required_MB: 2263.69` per WebLLM's catalog (~2.26 GB).
+ * Full-size model, used on desktop-class devices (`modelTier === "full"`)
+ * whose WebGPU adapter supports `shader-f16` (`shaderF16Available === true`,
+ * the common case). `vram_required_MB: 2263.69` per WebLLM's catalog
+ * (~2.26 GB).
  */
 export const MODEL_ID_FULL = "Llama-3.2-3B-Instruct-q4f16_1-MLC";
 
 /**
+ * `q4f32_1` fallback for `MODEL_ID_FULL`, used when `shaderF16Available` is
+ * false: same size tier, but doesn't require the `shader-f16` WebGPU
+ * extension (`required_features` is absent from this catalog entry).
+ * Heavier than `MODEL_ID_FULL` (`vram_required_MB: 2951.51`, ~2.95 GB)
+ * since f32 weights take more space than f16 -- an acceptable tradeoff on
+ * desktop-class hardware in exchange for not needing an optional GPU
+ * feature at all.
+ */
+export const MODEL_ID_FULL_F32 = "Llama-3.2-3B-Instruct-q4f32_1-MLC";
+
+/**
  * Compact model, used on memory-constrained devices such as phones
- * (`modelTier === "compact"`). Same family and chat template as
- * `MODEL_ID_FULL`, so `SYSTEM_PROMPT` and Spanish-response behavior are
- * unaffected by which one is loaded.
- * `vram_required_MB: 879.04` per WebLLM's catalog (~0.88 GB, ~2.6x less).
+ * (`modelTier === "compact"`) whose adapter supports `shader-f16`. Same
+ * family and chat template as `MODEL_ID_FULL`, so `SYSTEM_PROMPT` and
+ * Spanish-response behavior are unaffected by which one is loaded.
+ * `vram_required_MB: 879.04` per WebLLM's catalog (~0.88 GB, ~2.6x less
+ * than `MODEL_ID_FULL`).
  *
  * Introduced to avoid the renderer OOM-crash a full-size model causes on
  * phones: `navigator.deviceMemory` reports device RAM quantized to powers
@@ -36,9 +50,29 @@ export const MODEL_ID_FULL = "Llama-3.2-3B-Instruct-q4f16_1-MLC";
  */
 export const MODEL_ID_COMPACT = "Llama-3.2-1B-Instruct-q4f16_1-MLC";
 
-/** Maps the pure `modelTier` decided by `decide()` to the model to load. */
-export function modelIdForTier(tier: ModelTier): string {
-  return tier === "compact" ? MODEL_ID_COMPACT : MODEL_ID_FULL;
+/**
+ * `q4f32_1` fallback for `MODEL_ID_COMPACT`, used when `shaderF16Available`
+ * is false: `vram_required_MB: 1128.82` (~1.13 GB) per WebLLM's catalog --
+ * still well under the full-size model's footprint, so it stays safe for
+ * memory-constrained devices. This is the variant that fixes phones whose
+ * GPU driver exposes WebGPU but not the `shader-f16` extension (common on
+ * Android, e.g. some Adreno/Mali drivers): without it, WebLLM rejects
+ * `MODEL_ID_COMPACT` with a `ShaderF16SupportError` before downloading any
+ * weights (see `InferenceEngine.ts`, `classifyInitializationError`).
+ */
+export const MODEL_ID_COMPACT_F32 = "Llama-3.2-1B-Instruct-q4f32_1-MLC";
+
+/**
+ * Maps the pure `modelTier`/`shaderF16Available` decided by `decide()` to
+ * the concrete model id to load: `modelTier` picks the size (full/compact),
+ * `shaderF16Available` picks the quantization variant (q4f16_1 preferred,
+ * q4f32_1 fallback) -- two independent axes, not a single 1-of-4 choice.
+ */
+export function modelIdForTier(tier: ModelTier, shaderF16Available: boolean): string {
+  if (tier === "compact") {
+    return shaderF16Available ? MODEL_ID_COMPACT : MODEL_ID_COMPACT_F32;
+  }
+  return shaderF16Available ? MODEL_ID_FULL : MODEL_ID_FULL_F32;
 }
 
 // --- Model download and caching (Requirements 2.1, 2.3, 2.5) ---------------

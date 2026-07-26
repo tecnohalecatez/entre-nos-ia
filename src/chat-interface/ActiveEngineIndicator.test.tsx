@@ -45,6 +45,7 @@ function createCompatibility(
     selectedEngine: "none",
     missingCapabilities: [],
     modelTier: "full",
+    shaderF16Available: true,
     ...overrides,
   };
 }

@@ -221,6 +221,17 @@ describe("classifyInitializationError", () => {
     expect(classifyInitializationError(new Error(message))).toBe("network_error");
   });
 
+  it.each(["ShaderF16SupportError", "FeatureSupportError"])(
+    "classifies an error with name='%s' as unsupported_gpu_feature (Requirement 1: WebLLM's models all require shader-f16, unsupported by some Android GPU drivers)",
+    (name) => {
+      const error = new Error(
+        "This model requires WebGPU extension shader-f16, which is not enabled in this browser.",
+      );
+      error.name = name;
+      expect(classifyInitializationError(error)).toBe("unsupported_gpu_feature");
+    },
+  );
+
   it("classifies a generic error unrelated to memory or network as other_cause", () => {
     expect(classifyInitializationError(new Error("unexpected worker crash"))).toBe("other_cause");
   });

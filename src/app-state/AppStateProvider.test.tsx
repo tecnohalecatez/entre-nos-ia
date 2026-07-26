@@ -23,7 +23,7 @@ import { EngineInitializationError } from "../inference-engine/InferenceEngine";
 import type { InferenceEngine } from "../inference-engine/InferenceEngine";
 import type { DecideInput, CompatibilityResult } from "../compatibility-detector/decide";
 import { decide } from "../compatibility-detector/decide";
-import { MODEL_ID_FULL, MODEL_ID_COMPACT } from "./configuration";
+import { MODEL_ID_FULL, MODEL_ID_FULL_F32, MODEL_ID_COMPACT, MODEL_ID_COMPACT_F32 } from "./configuration";
 import { ModelDownloadError } from "../model-download-manager/ensureModelAvailable";
 import type { ModelDownloadManager } from "../model-download-manager/ensureModelAvailable";
 import type { AppStateProviderProps } from "./AppStateProvider";
@@ -60,6 +60,7 @@ const ANY_PROBE: DecideInput = {
   wasmAvailable: true,
   memoryGB: 8,
   isMobileDevice: false,
+  shaderF16Available: true,
 };
 
 /** Test helper component: exposes the context state as rendered text. */
@@ -113,6 +114,7 @@ describe("AppStateProvider - Degraded_Mode activation", () => {
         selectedEngine: "none",
         missingCapabilities: ["webgpu", "wasm"],
         modelTier: "full",
+        shaderF16Available: true,
       }),
     );
 
@@ -134,6 +136,7 @@ describe("AppStateProvider - Degraded_Mode activation", () => {
         selectedEngine: "none",
         missingCapabilities: ["memory"],
         modelTier: "full",
+        shaderF16Available: true,
       }),
     );
 
@@ -154,6 +157,7 @@ describe("AppStateProvider - Degraded_Mode activation", () => {
         selectedEngine: "webgpu",
         missingCapabilities: [],
         modelTier: "full",
+        shaderF16Available: true,
       }),
     );
     const { inferenceEngine, initialize } = createFakeInferenceEngine();
@@ -177,6 +181,7 @@ describe("AppStateProvider - Degraded_Mode activation", () => {
         selectedEngine: "webgpu",
         missingCapabilities: [],
         modelTier: "compact",
+        shaderF16Available: true,
       }),
     );
     const { inferenceEngine, initialize } = createFakeInferenceEngine();
@@ -189,6 +194,83 @@ describe("AppStateProvider - Degraded_Mode activation", () => {
     expect(initialize).toHaveBeenCalledWith("webgpu", MODEL_ID_COMPACT);
   });
 
+  it("initializes with MODEL_ID_COMPACT_F32 when modelTier is 'compact' and shaderF16Available is false (Requirement 1: real-world bug -- WebGPU available but shader-f16 unsupported, e.g. some Android GPU drivers)", async () => {
+    const decideFn = vi.fn(
+      (): CompatibilityResult => ({
+        webgpuAvailable: true,
+        wasmAvailable: false,
+        memoryGB: 4,
+        selectedEngine: "webgpu",
+        missingCapabilities: [],
+        modelTier: "compact",
+        shaderF16Available: false,
+      }),
+    );
+    const { inferenceEngine, initialize } = createFakeInferenceEngine();
+
+    renderWithProviders({ decideFn, createInferenceEngine: () => inferenceEngine });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("engine-ready").textContent).toBe("true");
+    });
+    expect(initialize).toHaveBeenCalledWith("webgpu", MODEL_ID_COMPACT_F32);
+    expect(screen.getByTestId("degraded-mode").textContent).toBe("null");
+  });
+
+  it("initializes with MODEL_ID_FULL_F32 when modelTier is 'full' and shaderF16Available is false", async () => {
+    const decideFn = vi.fn(
+      (): CompatibilityResult => ({
+        webgpuAvailable: true,
+        wasmAvailable: false,
+        memoryGB: 8,
+        selectedEngine: "webgpu",
+        missingCapabilities: [],
+        modelTier: "full",
+        shaderF16Available: false,
+      }),
+    );
+    const { inferenceEngine, initialize } = createFakeInferenceEngine();
+
+    renderWithProviders({ decideFn, createInferenceEngine: () => inferenceEngine });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("engine-ready").textContent).toBe("true");
+    });
+    expect(initialize).toHaveBeenCalledWith("webgpu", MODEL_ID_FULL_F32);
+  });
+
+  it("activates Degraded_Mode with a specific, actionable message when engine initialization fails with ShaderF16SupportError (defense in depth: the proactive shaderF16Available check itself failing to prevent this)", async () => {
+    const decideFn = vi.fn(
+      (): CompatibilityResult => ({
+        webgpuAvailable: true,
+        wasmAvailable: false,
+        memoryGB: 8,
+        selectedEngine: "webgpu",
+        missingCapabilities: [],
+        modelTier: "full",
+        shaderF16Available: true,
+      }),
+    );
+    const shaderF16Error = new Error(
+      "This model requires WebGPU extension shader-f16, which is not enabled in this browser.",
+    );
+    shaderF16Error.name = "ShaderF16SupportError";
+    const { inferenceEngine } = createFakeInferenceEngine({
+      initialize: vi
+        .fn()
+        .mockRejectedValue(new EngineInitializationError("unsupported_gpu_feature", shaderF16Error)),
+    });
+
+    renderWithProviders({ decideFn, createInferenceEngine: () => inferenceEngine });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("degraded-mode").textContent).not.toBe("null");
+    });
+    expect(screen.getByTestId("degraded-mode").textContent).toContain(
+      "la GPU de este dispositivo no soporta una función gráfica necesaria",
+    );
+  });
+
   it("activates Degraded_Mode with cause insufficient_memory when engine initialization fails due to OOM (8.1)", async () => {
     const decideFn = vi.fn(
       (): CompatibilityResult => ({
@@ -198,6 +280,7 @@ describe("AppStateProvider - Degraded_Mode activation", () => {
         selectedEngine: "webgpu",
         missingCapabilities: [],
         modelTier: "full",
+        shaderF16Available: true,
       }),
     );
     const { inferenceEngine } = createFakeInferenceEngine({
@@ -222,6 +305,7 @@ describe("AppStateProvider - Degraded_Mode activation", () => {
         selectedEngine: "webgpu",
         missingCapabilities: [],
         modelTier: "full",
+        shaderF16Available: true,
       }),
     );
     const { inferenceEngine } = createFakeInferenceEngine({
@@ -247,6 +331,7 @@ describe("AppStateProvider - Degraded_Mode activation", () => {
         selectedEngine: "webgpu",
         missingCapabilities: [],
         modelTier: "full",
+        shaderF16Available: true,
       }),
     );
     const { inferenceEngine } = createFakeInferenceEngine({
@@ -272,6 +357,7 @@ describe("AppStateProvider - Degraded_Mode activation", () => {
         selectedEngine: "webgpu",
         missingCapabilities: [],
         modelTier: "full",
+        shaderF16Available: true,
       }),
     );
     const { inferenceEngine } = createFakeInferenceEngine({
@@ -297,6 +383,7 @@ describe("AppStateProvider - Degraded_Mode activation", () => {
         selectedEngine: "webgpu",
         missingCapabilities: [],
         modelTier: "full",
+        shaderF16Available: true,
       }),
     );
     const { inferenceEngine, initialize } = createFakeInferenceEngine();
@@ -323,6 +410,7 @@ describe("AppStateProvider - Degraded_Mode activation", () => {
         selectedEngine: "webgpu",
         missingCapabilities: [],
         modelTier: "full",
+        shaderF16Available: true,
       }),
     );
     const { inferenceEngine } = createFakeInferenceEngine();
@@ -348,6 +436,7 @@ describe("AppStateProvider - Degraded_Mode activation", () => {
         selectedEngine: "none",
         missingCapabilities: ["webgpu", "wasm"],
         modelTier: "full",
+        shaderF16Available: true,
       }),
     );
 
@@ -392,6 +481,7 @@ describe("AppStateProvider - block initial load when offline (3.5)", () => {
       selectedEngine: "webgpu",
       missingCapabilities: [],
       modelTier: "full",
+      shaderF16Available: true,
     }),
   );
 
@@ -447,6 +537,7 @@ describe("AppStateProvider - model download/caching delegated to WebLLM by defau
         selectedEngine: "webgpu",
         missingCapabilities: [],
         modelTier: "full",
+        shaderF16Available: true,
       }),
     );
     const { inferenceEngine, initialize } = createFakeInferenceEngine();
@@ -491,6 +582,7 @@ describe("AppStateProvider - model download/caching delegated to WebLLM by defau
         selectedEngine: "webgpu",
         missingCapabilities: [],
         modelTier: "full",
+        shaderF16Available: true,
       }),
     );
     const { inferenceEngine } = createFakeInferenceEngine({

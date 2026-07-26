@@ -5,8 +5,16 @@
 // Hints). See .kiro/specs/asistente-ia-local/design.md (section
 // "Detector_Compatibilidad") and requirements.md (1.1, 1.7).
 
-/** GPU adapter returned by `GPU.requestAdapter()`. Shape not relevant here. */
-type GPUAdapter = Readonly<Record<string, unknown>>;
+/**
+ * GPU adapter returned by `GPU.requestAdapter()`. Only `features` is
+ * modeled: it's read synchronously to check for optional WebGPU extensions
+ * (e.g. `shader-f16`, required by WebLLM's prebuilt catalog) without a
+ * second `requestAdapter()` call. See `detect.ts`, `probeWebgpu()`.
+ */
+interface GPUAdapter {
+  /** Set-like collection of supported optional WebGPU extension names. */
+  readonly features: { has(name: string): boolean };
+}
 
 /** Minimal WebGPU API entry point exposed on `navigator.gpu`. */
 interface GPU {
