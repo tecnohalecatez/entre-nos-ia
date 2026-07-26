@@ -318,8 +318,22 @@ export function AppStateProvider({
       setLoading(false);
 
       // 4. Initial conversation load (5.3), once the engine is ready
-      // (doesn't block Degraded_Mode activation if it fails).
-      await reloadConversations();
+      // (doesn't block Degraded_Mode activation if it fails). Loaded inline
+      // (instead of calling the shared `reloadConversations` callback)
+      // specifically so the cancellation check below can run between the
+      // `await` and the state update: `reloadConversations` is also used by
+      // unrelated user-triggered actions (createConversation,
+      // deleteConversation, ...), which must NOT be tied to this effect's
+      // AbortController. Without this check, a component unmount while
+      // `loadConversations()` is still in flight would call `setConversations`
+      // after unmount -- harmless in a real browser, but a hard crash
+      // (`ReferenceError: window is not defined`) in the test environment,
+      // since jsdom/happy-dom's `window` may already be torn down by then.
+      const list = await conversationManager.loadConversations();
+      if (isCancelled(controller.signal)) {
+        return;
+      }
+      setConversations(list);
     }
 
     void runBootSequence();
