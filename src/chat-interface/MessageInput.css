@@ -1,0 +1,60 @@
+.message-input {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.message-input__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.message-input__field {
+  width: 100%;
+  min-height: 52px;
+  max-height: 200px;
+  resize: vertical;
+  font: inherit;
+  font-size: 14px;
+  color: var(--text-h);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.message-input__field:focus-visible {
+  outline: none;
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 3px var(--accent-bg);
+}
+
+.message-input__field[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.message-input__hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text);
+  opacity: 0.6;
+}
+
+.message-input__status-message {
+  min-height: 16px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.message-input__status-message--error {
+  color: var(--danger);
+}
+
+.message-input__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

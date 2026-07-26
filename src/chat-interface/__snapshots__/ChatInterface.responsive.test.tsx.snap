@@ -1,0 +1,147 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ChatInterface — responsive design (10.1, 10.2, 10.3) > DOM structure snapshot of the assembled layout (structural regression) 1`] = `
+<div
+  class="chat-interface"
+>
+  <header
+    class="chat-interface__header"
+  >
+    <span
+      class="chat-interface__brand"
+    >
+      <span
+        aria-hidden="true"
+        class="chat-interface__brand-icon"
+      >
+        ✨
+      </span>
+      Entre Nos IA
+    </span>
+    <div
+      class="chat-interface__indicators"
+    >
+      <span
+        aria-label="Mecanismo de inferencia activo"
+        class="active-engine-indicator"
+      >
+        WebGPU
+      </span>
+    </div>
+    <div
+      class="chat-interface__header-actions"
+    >
+      <button
+        aria-label="Tema: sigue al sistema (cambiar a claro)"
+        class="theme-toggle button button--ghost button--icon"
+        title="Tema: sigue al sistema (cambiar a claro)"
+        type="button"
+      >
+        <span
+          aria-hidden="true"
+        >
+          🖥️
+        </span>
+      </button>
+      <button
+        aria-expanded="false"
+        class="chat-interface__help-button button button--ghost button--sm"
+        type="button"
+      >
+        Ayuda
+      </button>
+    </div>
+  </header>
+  <div
+    class="chat-interface__body"
+  >
+    <aside
+      class="chat-interface__conversation-list"
+    >
+      <nav
+        aria-label="Conversaciones"
+        class="conversation-list"
+      >
+        <div
+          class="conversation-list__actions"
+        >
+          <button
+            class="button button--primary button--block"
+            type="button"
+          >
+            Nueva conversación
+          </button>
+          <button
+            class="button button--secondary button--block"
+            type="button"
+          >
+            Importar conversación
+          </button>
+          <input
+            accept="application/json"
+            aria-label="Importar conversación desde archivo"
+            style="display: none;"
+            type="file"
+          />
+        </div>
+        <p
+          class="conversation-list__empty-state"
+          data-testid="conversation-list-empty"
+        >
+          No tienes conversaciones guardadas
+        </p>
+      </nav>
+    </aside>
+    <main
+      class="chat-interface__main"
+    >
+      <section
+        aria-label="Historial de mensajes"
+        class="message-history message-history--empty"
+      >
+        <p
+          class="message-history__empty-state"
+        >
+          Seleccioná o creá una conversación para comenzar.
+        </p>
+      </section>
+      <form
+        class="message-input"
+      >
+        <label
+          class="message-input__label"
+          for="message-input-field"
+        >
+          Mensaje
+        </label>
+        <textarea
+          aria-invalid="false"
+          class="message-input__field"
+          id="message-input-field"
+        />
+        <p
+          class="message-input__hint"
+        >
+          Enter para enviar · Shift+Enter para nueva línea
+        </p>
+        <div
+          class="message-input__status-message"
+          id=":r0:"
+          role="status"
+        />
+        <div
+          class="message-input__actions"
+        >
+          <button
+            class="button button--primary"
+            disabled=""
+            type="submit"
+          >
+            Enviar
+          </button>
+        </div>
+      </form>
+    </main>
+  </div>
+</div>
+`;

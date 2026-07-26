@@ -1,0 +1,59 @@
+// Comprehensive property test for `decide()`. Example-based smoke tests
+// live in `decide.test.ts`.
+// See .kiro/specs/asistente-ia-local/design.md (section "Correctness Properties",
+// Property 1) and requirements.md (1.3, 1.4, 1.5, 1.7, 1.8, 10.6).
+import { describe, expect, it } from "vitest";
+import fc from "fast-check";
+import { decide } from "./decide";
+
+describe("decide - property test", () => {
+  // Feature: asistente-ia-local, Property 1: Decisión de motor de inferencia y modo degradado
+  it("selects the correct engine and reports exactly the missing capabilities", () => {
+    fc.assert(
+      fc.property(
+        fc.record({
+          webgpuAvailable: fc.boolean(),
+          wasmAvailable: fc.boolean(),
+          memoryGB: fc.option(fc.integer({ min: 0, max: 32 })),
+        }),
+        (input) => {
+          const result = decide(input);
+          const { webgpuAvailable, wasmAvailable, memoryGB } = input;
+
+          const enoughMemory = memoryGB === null || memoryGB >= 4;
+
+          const expectsWebgpu = webgpuAvailable && enoughMemory;
+          const expectsWasm = !webgpuAvailable && wasmAvailable && enoughMemory;
+
+          // Selects "webgpu" if and only if webgpu is available and there is enough memory.
+          expect(result.selectedEngine === "webgpu").toBe(expectsWebgpu);
+          // Selects "wasm" if and only if webgpu is unavailable, wasm is available and there is enough memory.
+          expect(result.selectedEngine === "wasm").toBe(expectsWasm);
+          // "none" in any other case.
+          expect(result.selectedEngine === "none").toBe(!expectsWebgpu && !expectsWasm);
+
+          // missingCapabilities SHALL reflect exactly the unmet capabilities
+          // that led to the decision, following the implemented precedence
+          // order (insufficient memory -> only "memory"; otherwise, "webgpu"
+          // and/or "wasm" missing when none is selected).
+          let expectedCapabilities: string[];
+          if (!enoughMemory) {
+            expectedCapabilities = ["memory"];
+          } else if (webgpuAvailable || wasmAvailable) {
+            expectedCapabilities = [];
+          } else {
+            expectedCapabilities = ["webgpu", "wasm"];
+          }
+
+          expect(result.missingCapabilities).toEqual(expectedCapabilities);
+
+          // The result always preserves the input data unchanged.
+          expect(result.webgpuAvailable).toBe(webgpuAvailable);
+          expect(result.wasmAvailable).toBe(wasmAvailable);
+          expect(result.memoryGB).toBe(memoryGB);
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+});

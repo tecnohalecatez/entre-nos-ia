@@ -1,0 +1,145 @@
+/*
+ * Responsive layout of the Chat_Interface (task 20.1, Requirement 10: 10.1,
+ * 10.2, 10.3), with its own visual identity (elevated surfaces, purple
+ * gradient accent, "frosted glass" header).
+ *
+ * Structure:
+ * - `.chat-interface` occupies the full available viewport height (`100dvh`,
+ *   with `100vh` as fallback) and is split into a column: header, optional
+ *   help section, and the body (`.chat-interface__body`).
+ * - `.chat-interface__body` alternates between stacked (mobile) and
+ *   side-by-side (desktop) depending on available width.
+ * - Inside `.chat-interface__main`, `MessageHistory` already declares
+ *   `overflow-y: auto` and `flex: 1 1 auto` (see MessageHistory.css); here
+ *   we only ensure its parent container has a bounded height, and that
+ *   `MessageInput` doesn't shrink (`flex: 0 0 auto`), so it stays always
+ *   visible together with the most recent message (10.3) without needing JS
+ *   to react to `orientationchange`.
+ */
+
+.chat-interface {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  box-sizing: border-box;
+  background: var(--bg);
+}
+
+.chat-interface__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
+  backdrop-filter: blur(10px);
+  overflow-x: hidden;
+}
+
+.chat-interface__brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--text-h);
+  font-size: 15px;
+  white-space: nowrap;
+  margin-right: 4px;
+}
+
+.chat-interface__brand-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: var(--accent-gradient);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  box-shadow: var(--accent-glow);
+  flex-shrink: 0;
+}
+
+.chat-interface__indicators {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.chat-interface__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.chat-interface__help-button {
+  flex-shrink: 0;
+}
+
+.chat-interface__body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Mobile widths (10.1): stacks the conversation list above the chat area
+ * instead of showing them side by side, avoiding any need for horizontal
+ * scrolling. */
+@media (max-width: 768px) {
+  .chat-interface__body {
+    flex-direction: column;
+  }
+
+  .chat-interface__conversation-list {
+    flex: 0 0 auto;
+    max-height: 35vh;
+    overflow-y: auto;
+    border-bottom: 1px solid var(--border);
+    border-right: none;
+  }
+}
+
+/* Desktop widths (10.2): conversation list as a bounded-width side panel,
+ * chat area taking up the rest of the available space. */
+@media (min-width: 769px) {
+  .chat-interface__conversation-list {
+    flex: 0 0 260px;
+    max-width: 260px;
+    overflow-y: auto;
+    border-right: 1px solid var(--border);
+  }
+}
+
+.chat-interface__conversation-list {
+  box-sizing: border-box;
+  padding: 16px;
+  overflow-x: hidden;
+  background: var(--surface);
+}
+
+.chat-interface__main {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+/* MessageInput must not shrink: it stays always visible at the bottom of
+ * the chat area, together with the history's most recent message (10.3). */
+.chat-interface__main > .message-input {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--border);
+  padding: 14px 20px 18px;
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(10px);
+}

@@ -1,0 +1,79 @@
+/* Spacing for the markdown produced by `Markdown.tsx`, using the same
+ * design tokens as the rest of the Chat_Interface (see src/index.css). */
+
+.markdown {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--text-h);
+}
+
+.markdown > *:first-child {
+  margin-top: 0;
+}
+
+.markdown > *:last-child {
+  margin-bottom: 0;
+}
+
+.markdown p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4,
+.markdown h5,
+.markdown h6 {
+  margin: 0;
+  font-weight: 700;
+  line-height: 130%;
+}
+
+.markdown h1 {
+  font-size: 1.25em;
+}
+
+.markdown h2 {
+  font-size: 1.15em;
+}
+
+.markdown h3,
+.markdown h4,
+.markdown h5,
+.markdown h6 {
+  font-size: 1.05em;
+}
+
+.markdown ul,
+.markdown ol {
+  margin: 0;
+  padding-left: 1.4em;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.markdown li {
+  white-space: pre-wrap;
+}
+
+.markdown pre {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--code-bg);
+  overflow-x: auto;
+}
+
+.markdown pre code {
+  padding: 0;
+  background: transparent;
+  white-space: pre;
+}
+
+.markdown a {
+  color: var(--accent-2);
+}

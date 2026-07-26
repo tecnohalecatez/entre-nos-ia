@@ -1,0 +1,73 @@
+.message-history {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+
+.message-history--empty {
+  align-items: center;
+  justify-content: center;
+}
+
+.message-history__empty-state {
+  color: var(--text);
+  text-align: center;
+}
+
+.message-history__message {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: min(85%, 680px);
+}
+
+.message-history__message--user {
+  align-self: flex-end;
+}
+
+.message-history__message--assistant {
+  align-self: flex-start;
+}
+
+.message-history__avatar {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  background: var(--accent-gradient);
+  box-shadow: var(--accent-glow);
+}
+
+.message-history__bubble {
+  min-width: 0;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.message-history__message--user .message-history__bubble {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+}
+
+.message-history__message--generating .message-history__bubble {
+  opacity: 0.85;
+}
+
+.message-history__message--cancelled .message-history__bubble {
+  opacity: 0.7;
+}
+
+.message-history__content {
+  margin: 0;
+  white-space: pre-wrap;
+  color: var(--text-h);
+}
