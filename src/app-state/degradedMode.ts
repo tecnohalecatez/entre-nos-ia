@@ -14,7 +14,7 @@ export type DegradedModeCause =
   | { type: "incompatibility"; missingCapabilities: string[] }
   | {
       type: "engine_init_failure";
-      cause: "insufficient_memory" | "network_error" | "unsupported_gpu_feature" | "other_cause";
+      cause: "insufficient_memory" | "network_error" | "unsupported_gpu_feature" | "gpu_unavailable" | "other_cause";
     }
   | { type: "model_download_failure" }
   | { type: "no_connection_initial_load" };
@@ -37,7 +37,7 @@ function describeMissingCapabilities(missingCapabilities: string[]): string {
 
 /** Message for each possible `engine_init_failure` sub-cause. */
 function engineInitFailureMessage(
-  cause: "insufficient_memory" | "network_error" | "unsupported_gpu_feature" | "other_cause",
+  cause: "insufficient_memory" | "network_error" | "unsupported_gpu_feature" | "gpu_unavailable" | "other_cause",
 ): string {
   if (cause === "insufficient_memory") {
     return "El asistente no pudo inicializarse: el dispositivo no cuenta con memoria suficiente.";
@@ -49,6 +49,13 @@ function engineInitFailureMessage(
     // Not something reloading fixes (unlike the generic message below):
     // it's a fixed capability of this device's GPU/driver.
     return "El asistente no pudo inicializarse porque la GPU de este dispositivo no soporta una función gráfica necesaria (shader-f16), algo común en ciertos modelos de celular. No se soluciona recargando la página; probá con otro dispositivo o navegador.";
+  }
+  if (cause === "gpu_unavailable") {
+    // Unlike unsupported_gpu_feature, this comes from a second, independent
+    // WebGPU probe (WebLLM's own) failing after ours already succeeded --
+    // possibly transient (a flaky driver/context loss), so reloading is a
+    // reasonable suggestion here, unlike the other device-capability causes.
+    return "El asistente no pudo inicializarse: WebGPU dejó de estar disponible justo al momento de cargar el modelo. Probá recargar la página; si el problema persiste, es probable que se deba a una limitación del navegador o la GPU de este dispositivo.";
   }
   return "El asistente no pudo inicializarse. Esto puede deberse a que tu navegador no sea completamente compatible con la tecnología requerida, a una extensión o configuración de privacidad bloqueando la descarga del modelo, o a un problema temporal. Probá recargar la página; si el problema persiste, verificá que tu navegador soporte WebGPU o WebAssembly y que no tengas bloqueadores de contenido activos para este sitio.";
 }

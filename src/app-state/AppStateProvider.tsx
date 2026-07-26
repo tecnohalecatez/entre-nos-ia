@@ -55,7 +55,7 @@ import { useNotification } from "../notification/useNotification";
 import { AppStateContext } from "./context";
 import type { DegradedModeCause } from "./degradedMode";
 import { causeFromIncompatibility, degradedModeMessage } from "./degradedMode";
-import { modelIdForTier } from "./configuration";
+import { modelIdForTier, contextWindowSizeForTier } from "./configuration";
 
 export interface AppStateProviderProps {
   children: ReactNode;
@@ -281,6 +281,7 @@ export function AppStateProvider({
         await inferenceEngine.initialize(
           result.selectedEngine,
           modelIdForTier(result.modelTier, result.shaderF16Available),
+          contextWindowSizeForTier(result.modelTier),
         );
       } catch (error) {
         if (isCancelled(controller.signal)) {

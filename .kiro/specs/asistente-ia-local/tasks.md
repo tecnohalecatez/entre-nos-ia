@@ -279,6 +279,23 @@ Este plan traduce el diseño técnico (React + Vite + TypeScript, WebLLM, vite-p
   - [x] 26.3 Clasificación de red de seguridad para `ShaderF16SupportError`/`FeatureSupportError` en `classifyInitializationError`
     - Nueva causa `unsupported_gpu_feature` con mensaje de Modo_Degradado específico y accionable, por si el sondeo proactivo (26.1) no evita el error
     - _Requirements: 1.12_
+    - **Nota post-verificación:** confirmado en producción que esta tarea NO resolvió el bug real
+      reportado en Android -- el dispositivo probado sigue mostrando el mensaje genérico
+      (`other_cause`), no el de `unsupported_gpu_feature`, así que el error real ahí no es
+      `ShaderF16SupportError`. Sigue vigente como mitigación válida para los dispositivos que sí
+      tengan ese problema específico; el diagnóstico del caso reportado continúa en la tarea 27.
+
+- [x] 27. Más visibilidad de errores en Android + reducir memoria de generación en iOS
+  - Sin forma de depuración remota disponible para confirmar causa raíz; ambos ítems son
+    mitigaciones/mejoras de visibilidad best-effort, documentado explícitamente en design.md
+  - [x] 27.1 Clasificar `WebGPUNotAvailableError`/`WebGPUNotFoundError` como causa `gpu_unavailable`
+    - Distingue una inconsistencia entre la sonda inicial (`probeWebgpu()`) y la negociación WebGPU
+      interna de `MLCEngine.reload()` (`detectGPUDevice()`), independiente de nuestra sonda
+    - _Requirements: 1.14_
+  - [x] 27.2 Reducir `context_window_size` a `CONTEXT_WINDOW_SIZE_COMPACT = 2048` en el nivel compacto
+    - Mitigación para el crash observado en iOS/Safari durante la generación (no en el arranque),
+      consistente con presión de memoria del KV-cache; iOS no expone señal de memoria desde JS
+    - _Requirements: 1.13_
 
 ## Notes
 

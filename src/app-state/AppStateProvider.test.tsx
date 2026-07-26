@@ -169,7 +169,7 @@ describe("AppStateProvider - Degraded_Mode activation", () => {
     });
     expect(screen.getByTestId("degraded-mode").textContent).toBe("null");
     expect(screen.getByTestId("loading").textContent).toBe("false");
-    expect(initialize).toHaveBeenCalledWith("webgpu", MODEL_ID_FULL);
+    expect(initialize).toHaveBeenCalledWith("webgpu", MODEL_ID_FULL, undefined);
   });
 
   it("initializes with MODEL_ID_COMPACT when decide() reports modelTier 'compact' (Requirement 1: avoids OOM-crashing memory-constrained devices)", async () => {
@@ -191,7 +191,7 @@ describe("AppStateProvider - Degraded_Mode activation", () => {
     await waitFor(() => {
       expect(screen.getByTestId("engine-ready").textContent).toBe("true");
     });
-    expect(initialize).toHaveBeenCalledWith("webgpu", MODEL_ID_COMPACT);
+    expect(initialize).toHaveBeenCalledWith("webgpu", MODEL_ID_COMPACT, 2048);
   });
 
   it("initializes with MODEL_ID_COMPACT_F32 when modelTier is 'compact' and shaderF16Available is false (Requirement 1: real-world bug -- WebGPU available but shader-f16 unsupported, e.g. some Android GPU drivers)", async () => {
@@ -213,7 +213,7 @@ describe("AppStateProvider - Degraded_Mode activation", () => {
     await waitFor(() => {
       expect(screen.getByTestId("engine-ready").textContent).toBe("true");
     });
-    expect(initialize).toHaveBeenCalledWith("webgpu", MODEL_ID_COMPACT_F32);
+    expect(initialize).toHaveBeenCalledWith("webgpu", MODEL_ID_COMPACT_F32, 2048);
     expect(screen.getByTestId("degraded-mode").textContent).toBe("null");
   });
 
@@ -236,7 +236,7 @@ describe("AppStateProvider - Degraded_Mode activation", () => {
     await waitFor(() => {
       expect(screen.getByTestId("engine-ready").textContent).toBe("true");
     });
-    expect(initialize).toHaveBeenCalledWith("webgpu", MODEL_ID_FULL_F32);
+    expect(initialize).toHaveBeenCalledWith("webgpu", MODEL_ID_FULL_F32, undefined);
   });
 
   it("activates Degraded_Mode with a specific, actionable message when engine initialization fails with ShaderF16SupportError (defense in depth: the proactive shaderF16Available check itself failing to prevent this)", async () => {
@@ -268,6 +268,36 @@ describe("AppStateProvider - Degraded_Mode activation", () => {
     });
     expect(screen.getByTestId("degraded-mode").textContent).toContain(
       "la GPU de este dispositivo no soporta una función gráfica necesaria",
+    );
+  });
+
+  it("activates Degraded_Mode with a specific message when engine initialization fails with WebGPUNotAvailableError (Requirement 1: WebLLM's own internal GPU probe failing independently of ours)", async () => {
+    const decideFn = vi.fn(
+      (): CompatibilityResult => ({
+        webgpuAvailable: true,
+        wasmAvailable: false,
+        memoryGB: 8,
+        selectedEngine: "webgpu",
+        missingCapabilities: [],
+        modelTier: "full",
+        shaderF16Available: true,
+      }),
+    );
+    const webgpuUnavailableError = new Error("WebGPU is not supported in your current environment.");
+    webgpuUnavailableError.name = "WebGPUNotAvailableError";
+    const { inferenceEngine } = createFakeInferenceEngine({
+      initialize: vi
+        .fn()
+        .mockRejectedValue(new EngineInitializationError("gpu_unavailable", webgpuUnavailableError)),
+    });
+
+    renderWithProviders({ decideFn, createInferenceEngine: () => inferenceEngine });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("degraded-mode").textContent).not.toBe("null");
+    });
+    expect(screen.getByTestId("degraded-mode").textContent).toContain(
+      "WebGPU dejó de estar disponible justo al momento de cargar el modelo",
     );
   });
 
@@ -567,7 +597,7 @@ describe("AppStateProvider - model download/caching delegated to WebLLM by defau
       expect(screen.getByTestId("engine-ready").textContent).toBe("true");
     });
     expect(screen.getByTestId("degraded-mode").textContent).toBe("null");
-    expect(initialize).toHaveBeenCalledWith("webgpu", MODEL_ID_FULL);
+    expect(initialize).toHaveBeenCalledWith("webgpu", MODEL_ID_FULL, undefined);
     expect(fetchMock).not.toHaveBeenCalled();
 
     vi.unstubAllGlobals();

@@ -8,7 +8,7 @@
 // injected via a factory function (`MlcEngineFactory`) instead of being
 // constructed directly inside the class.
 
-import type { CreateMLCEngine as CreateMLCEngineType } from "@mlc-ai/web-llm";
+import type { ChatOptions, CreateMLCEngine as CreateMLCEngineType } from "@mlc-ai/web-llm";
 import type { Message, MessageRole } from "../types/models";
 import { SYSTEM_PROMPT } from "./systemPrompt";
 
@@ -50,6 +50,13 @@ export interface InitializationProgressReport {
 
 export interface MlcEngineFactoryOptions {
   onProgress?: (report: InitializationProgressReport) => void;
+  /**
+   * Overrides for the model's own `mlc-chat-config.json` (e.g.
+   * `context_window_size`). Used to reduce the KV-cache's memory footprint
+   * during generation on memory-constrained devices -- see
+   * `configuration.ts`, `contextWindowSizeForTier()`.
+   */
+  chatOptions?: ChatOptions;
 }
 
 /**
@@ -69,13 +76,15 @@ export type EngineInitializationFailureCause =
   | "insufficient_memory"
   | "network_error"
   | "unsupported_gpu_feature"
+  | "gpu_unavailable"
   | "other_cause";
 
 /**
  * Typed error thrown by `initialize()` when engine loading fails, allowing
  * the caller to distinguish between insufficient memory (8.1), a network
- * failure while fetching the model, an unsupported required GPU feature,
- * and any other cause (8.5) without freely inspecting error messages.
+ * failure while fetching the model, an unsupported required GPU feature, an
+ * inconsistent WebGPU availability, and any other cause (8.5) without
+ * freely inspecting error messages.
  */
 export class EngineInitializationError extends Error {
   override readonly cause: EngineInitializationFailureCause;
@@ -89,7 +98,9 @@ export class EngineInitializationError extends Error {
           ? "Could not initialize the InferenceEngine: network error while fetching the model."
           : cause === "unsupported_gpu_feature"
             ? "Could not initialize the InferenceEngine: a required GPU feature is not supported."
-            : "Could not initialize the InferenceEngine."
+            : cause === "gpu_unavailable"
+              ? "Could not initialize the InferenceEngine: WebGPU was unavailable when the engine tried to use it."
+              : "Could not initialize the InferenceEngine."
     );
     this.name = "EngineInitializationError";
     this.cause = cause;
@@ -131,8 +142,8 @@ function extractErrorDescription(error: unknown): string {
 
 /**
  * Classifies an engine initialization error as insufficient memory (8.1), a
- * network/download failure, an unsupported required GPU feature, or another
- * cause (8.5).
+ * network/download failure, an unsupported required GPU feature, an
+ * inconsistent WebGPU availability, or another cause (8.5).
  *
  * `MLCEngine.reload()` throws a `DeviceLostError` (name `"DeviceLostError"`)
  * when the WebGPU device is lost, which, per WebLLM's own documentation,
@@ -149,6 +160,16 @@ function extractErrorDescription(error: unknown): string {
  * proactive check itself is ever wrong (e.g. a future catalog model
  * requiring a different, unprobed feature).
  *
+ * `WebGPUNotAvailableError`/`WebGPUNotFoundError` (also detected by name)
+ * come from `MLCEngine.reload()`'s own internal `detectGPUDevice()` call --
+ * a SEPARATE `requestAdapter()`/`requestDevice()` negotiation, independent
+ * of the one `detect.ts`'s `probeWebgpu()` already performed. If our probe
+ * reported `webgpuAvailable: true` but this internal one fails anyway (e.g.
+ * a flaky low-end Android GPU driver, or GPU context lost between the two
+ * probes), it surfaces here as `"gpu_unavailable"` instead of the generic
+ * `"other_cause"` -- diagnostic visibility for a real-world failure mode
+ * observed on-device that doesn't match any of the classifications above.
+ *
  * For any other error (including WASM failures without WebGPU), the message
  * is inspected first for common out-of-memory patterns, then for common
  * network-failure patterns (the model's weight shards are fetched from a
@@ -161,6 +182,9 @@ export function classifyInitializationError(error: unknown): EngineInitializatio
   }
   if (error instanceof Error && (error.name === "ShaderF16SupportError" || error.name === "FeatureSupportError")) {
     return "unsupported_gpu_feature";
+  }
+  if (error instanceof Error && (error.name === "WebGPUNotAvailableError" || error.name === "WebGPUNotFoundError")) {
+    return "gpu_unavailable";
   }
   const description = extractErrorDescription(error);
   if (OOM_MESSAGE_PATTERNS.some((pattern) => pattern.test(description))) {
@@ -201,8 +225,13 @@ export interface InferenceEngine {
    * `modelIdForTier`), only known once the boot sequence's compatibility
    * detection has run -- after the `InferenceEngine` instance already
    * exists (see `AppStateProvider.tsx`).
+   *
+   * `contextWindowSize`, when provided, overrides the model's own default
+   * (see `configuration.ts`, `contextWindowSizeForTier()`): used to shrink
+   * the KV-cache's memory footprint during generation on memory-constrained
+   * devices. `undefined` keeps the model's own default unchanged.
    */
-  initialize(engine: "webgpu" | "wasm", modelId: string): Promise<void>;
+  initialize(engine: "webgpu" | "wasm", modelId: string, contextWindowSize?: number): Promise<void>;
   generate(history: Message[]): AsyncIterable<string>;
   cancel(): void;
 }
@@ -228,11 +257,11 @@ export class InferenceEngineWebLLM implements InferenceEngine {
     this.onInitializationProgress = onInitializationProgress;
   }
 
-  async initialize(engine: "webgpu" | "wasm", modelId: string): Promise<void> {
-    const options: MlcEngineFactoryOptions =
-      this.onInitializationProgress !== undefined
-        ? { onProgress: this.onInitializationProgress }
-        : {};
+  async initialize(engine: "webgpu" | "wasm", modelId: string, contextWindowSize?: number): Promise<void> {
+    const options: MlcEngineFactoryOptions = {
+      ...(this.onInitializationProgress !== undefined ? { onProgress: this.onInitializationProgress } : {}),
+      ...(contextWindowSize !== undefined ? { chatOptions: { context_window_size: contextWindowSize } } : {}),
+    };
     try {
       this.mlcEngine = await this.engineFactory(modelId, engine, options);
     } catch (error) {
@@ -289,10 +318,8 @@ export function createDefaultMlcEngineFactory(
   createMLCEngine: typeof CreateMLCEngineType,
 ): MlcEngineFactory {
   return async (modelId, _engine, options) => {
-    const realEngine =
-      options?.onProgress !== undefined
-        ? await createMLCEngine(modelId, { initProgressCallback: options.onProgress })
-        : await createMLCEngine(modelId);
+    const engineConfig = options?.onProgress !== undefined ? { initProgressCallback: options.onProgress } : {};
+    const realEngine = await createMLCEngine(modelId, engineConfig, options?.chatOptions);
     return {
       chat: {
         completions: {

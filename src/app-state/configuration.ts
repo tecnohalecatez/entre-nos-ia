@@ -75,6 +75,30 @@ export function modelIdForTier(tier: ModelTier, shaderF16Available: boolean): st
   return shaderF16Available ? MODEL_ID_FULL : MODEL_ID_FULL_F32;
 }
 
+/**
+ * Reduced `context_window_size` for `modelTier === "compact"` (mobile
+ * devices), overriding the model's own default (4096, per every Llama-3.2
+ * catalog entry's `overrides.context_window_size`). Roughly halves the
+ * KV-cache's memory footprint during generation.
+ *
+ * Best-effort mitigation, NOT a confirmed fix: browsers don't expose a way
+ * to read a mobile device's actual available memory during generation (iOS
+ * Safari doesn't expose ANY memory signal at all, see `decide.ts`'s
+ * `MIN_MEMORY_GB_FULL_MODEL` comment), so this is a bounded, low-risk step
+ * down rather than a measured response to an observed constraint.
+ */
+export const CONTEXT_WINDOW_SIZE_COMPACT = 2048;
+
+/**
+ * Maps `modelTier` to the `context_window_size` override `InferenceEngine`
+ * should apply, or `undefined` to keep the model's own default unchanged
+ * (`modelTier === "full"`: desktop-class devices aren't the ones observed
+ * crashing during generation).
+ */
+export function contextWindowSizeForTier(tier: ModelTier): number | undefined {
+  return tier === "compact" ? CONTEXT_WINDOW_SIZE_COMPACT : undefined;
+}
+
 // --- Model download and caching (Requirements 2.1, 2.3, 2.5) ---------------
 //
 // WebLLM manages downloading and caching the model weights internally

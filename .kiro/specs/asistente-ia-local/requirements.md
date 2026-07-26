@@ -46,6 +46,8 @@ Esta funcionalidad implementa un asistente de inteligencia artificial conversaci
 10. WHEN el Motor_Inferencia se inicializa con Nivel_Modelo "compacto", THE Motor_Inferencia SHALL cargar un modelo de menor tamaño que el usado con Nivel_Modelo "completo", preservando el mismo idioma de respuesta (Requisito 4) y el resto del comportamiento funcional del Sistema.
 11. WHEN el Detector_Compatibilidad verifica la disponibilidad de WebGPU, THE Detector_Compatibilidad SHALL además verificar si el adaptador soporta la extensión `shader-f16`.
 12. WHERE el adaptador WebGPU no soporta la extensión `shader-f16`, THE Motor_Inferencia SHALL cargar la variante del modelo que no requiere esa extensión, preservando el Nivel_Modelo resuelto por el criterio 1.9 y sin activar el Modo_Degradado por ese motivo.
+13. WHEN el Motor_Inferencia se inicializa con Nivel_Modelo "compacto", THE Motor_Inferencia SHALL utilizar un tamaño de ventana de contexto reducido respecto del valor por defecto del modelo, para acotar el uso de memoria durante la generación en dispositivos con recursos limitados.
+14. IF la inicialización del Motor_Inferencia falla por una causa distinta a memoria insuficiente, error de red, o falta de soporte de una función de GPU requerida, THEN THE Sistema SHALL distinguir, cuando sea posible, si la causa es una inconsistencia de disponibilidad de WebGPU entre la detección inicial y la inicialización real, y mostrar un mensaje específico para ese caso en el Modo_Degradado.
 
 ### Requisito 2: Descarga y cacheo local de los pesos del modelo
 
