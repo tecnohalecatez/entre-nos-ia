@@ -44,6 +44,7 @@ function createCompatibility(
     memoryGB: 8,
     selectedEngine: "none",
     missingCapabilities: [],
+    modelTier: "full",
     ...overrides,
   };
 }

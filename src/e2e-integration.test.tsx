@@ -47,6 +47,7 @@ import { ModelDownloadError } from "./model-download-manager/ensureModelAvailabl
 import type { ModelDownloadManager } from "./model-download-manager/ensureModelAvailable";
 import type { InferenceEngine } from "./inference-engine/InferenceEngine";
 import type { DecideInput, CompatibilityResult } from "./compatibility-detector/decide";
+import { MODEL_ID_FULL } from "./app-state/configuration";
 
 beforeEach(() => {
   // fake-indexeddb doesn't isolate automatically between tests (same
@@ -146,7 +147,12 @@ function createStreamingInferenceEngine(chunks: string[]): InferenceEngine {
   }).inferenceEngine;
 }
 
-const ANY_PROBE: DecideInput = { webgpuAvailable: true, wasmAvailable: true, memoryGB: 8 };
+const ANY_PROBE: DecideInput = {
+  webgpuAvailable: true,
+  wasmAvailable: true,
+  memoryGB: 8,
+  isMobileDevice: false,
+};
 
 const WEBGPU_RESULT: CompatibilityResult = {
   webgpuAvailable: true,
@@ -154,6 +160,7 @@ const WEBGPU_RESULT: CompatibilityResult = {
   memoryGB: 8,
   selectedEngine: "webgpu",
   missingCapabilities: [],
+  modelTier: "full",
 };
 
 const WASM_RESULT: CompatibilityResult = {
@@ -162,6 +169,7 @@ const WASM_RESULT: CompatibilityResult = {
   memoryGB: 8,
   selectedEngine: "wasm",
   missingCapabilities: [],
+  modelTier: "full",
 };
 
 /** Types `text` into `MessageInput`'s real `textarea` and clicks "Enviar". */
@@ -486,7 +494,7 @@ describe("e2e integration - online/offline boot scenarios with and without prior
 
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Mensaje" })).toBeInTheDocument();
-    expect(initialize).toHaveBeenCalledWith("webgpu");
+    expect(initialize).toHaveBeenCalledWith("webgpu", MODEL_ID_FULL);
   });
 });
 

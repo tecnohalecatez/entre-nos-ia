@@ -130,7 +130,7 @@ export function useSendMessage(): UseSendMessageResult {
 
   const inferenceEngineForCancel = useMemo<InferenceEngine>(
     () => ({
-      initialize: (engine) => inferenceEngine.initialize(engine),
+      initialize: (engine, modelId) => inferenceEngine.initialize(engine, modelId),
       generate: (history) => inferenceEngine.generate(history),
       cancel: () => {
         cancelledRef.current = true;

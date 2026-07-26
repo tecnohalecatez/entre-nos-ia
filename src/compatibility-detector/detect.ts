@@ -74,16 +74,33 @@ async function probeMemoryGB(): Promise<number | null> {
   return withTimeout(Promise.resolve(memoryGB), PROBE_TIMEOUT_MS, null);
 }
 
+/** Matches common mobile-browser User-Agent tokens (Android/iOS/other). */
+const MOBILE_USER_AGENT_PATTERN = /Android|iPhone|iPad|iPod|Mobile/i;
+
+/**
+ * Probes whether the current device is mobile-class, used to decide
+ * `modelTier` in `decide()` (a full-size model reliably OOM-crashes phones,
+ * see `configuration.ts`). Prefers `navigator.userAgentData.mobile`
+ * (Chromium, exact signal); falls back to a User-Agent string check for
+ * browsers that don't expose User-Agent Client Hints (e.g. Safari/iOS,
+ * which also lacks `navigator.deviceMemory`).
+ */
+async function probeIsMobileDevice(): Promise<boolean> {
+  const mobile = navigator.userAgentData?.mobile ?? MOBILE_USER_AGENT_PATTERN.test(navigator.userAgent);
+  return withTimeout(Promise.resolve(mobile), PROBE_TIMEOUT_MS, false);
+}
+
 /**
  * Runs the real browser probes (environment I/O, with a 5s timeout per
  * probe) required by `decide()`. See Requirements 1.1, 1.2, 1.7.
  */
 export async function detect(): Promise<DecideInput> {
-  const [webgpuAvailable, wasmAvailable, memoryGB] = await Promise.all([
+  const [webgpuAvailable, wasmAvailable, memoryGB, isMobileDevice] = await Promise.all([
     probeWebgpu(),
     probeWasm(),
     probeMemoryGB(),
+    probeIsMobileDevice(),
   ]);
 
-  return { webgpuAvailable, wasmAvailable, memoryGB };
+  return { webgpuAvailable, wasmAvailable, memoryGB, isMobileDevice };
 }

@@ -24,6 +24,7 @@ Esta funcionalidad implementa un asistente de inteligencia artificial conversaci
 - **Manifest_App**: Archivo de manifiesto de aplicación web (manifest.json) que declara los metadatos necesarios para que el Sistema sea instalable como aplicación web progresiva, incluyendo nombre, íconos, color de tema y modo de visualización.
 - **Modo_Standalone**: Modo de visualización en el que el Sistema se ejecuta como una aplicación independiente, sin la barra de direcciones ni otros elementos de la interfaz del navegador, tras haber sido instalado por el usuario.
 - **Pipeline_Amplify**: Componente externo (AWS Amplify Hosting) que construye el Sistema a partir del repositorio y sirve sus assets estáticos por HTTPS, sin formar parte del tiempo de ejecución de la aplicación.
+- **Nivel_Modelo**: Decisión del Detector_Compatibilidad sobre qué tamaño de modelo cargar ("completo" o "compacto") según la capacidad de memoria del dispositivo, para evitar que el Motor_Inferencia agote la memoria del proceso en dispositivos con recursos limitados (p. ej. celulares).
 
 ## Requirements
 
@@ -41,6 +42,8 @@ Esta funcionalidad implementa un asistente de inteligencia artificial conversaci
 6. WHILE la Interfaz_Chat está visible en la pantalla del usuario, THE Sistema SHALL mostrar de forma persistente el mecanismo de inferencia activo (WebGPU o WASM).
 7. WHEN el Detector_Compatibilidad verifica la disponibilidad de WebGPU o WebAssembly, THE Detector_Compatibilidad SHALL además verificar que el dispositivo cuente con al menos 4 GB de memoria disponible.
 8. IF la memoria disponible del dispositivo es inferior a 4 GB, THEN THE Sistema SHALL activar el Modo_Degradado y mostrar al usuario un mensaje explicando que el dispositivo no cuenta con memoria suficiente.
+9. WHEN el Detector_Compatibilidad determina que el dispositivo es de tipo móvil, o que su memoria disponible es inferior al umbral del nivel de modelo completo, THE Detector_Compatibilidad SHALL resolver el Nivel_Modelo como "compacto"; en cualquier otro caso SHALL resolverlo como "completo". Esta decisión es independiente de la evaluada en los criterios 1.3/1.4/1.5/1.8 (mecanismo de inferencia y Modo_Degradado).
+10. WHEN el Motor_Inferencia se inicializa con Nivel_Modelo "compacto", THE Motor_Inferencia SHALL cargar un modelo de menor tamaño que el usado con Nivel_Modelo "completo", preservando el mismo idioma de respuesta (Requisito 4) y el resto del comportamiento funcional del Sistema.
 
 ### Requisito 2: Descarga y cacheo local de los pesos del modelo
 

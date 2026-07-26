@@ -15,10 +15,11 @@ describe("decide - property test", () => {
           webgpuAvailable: fc.boolean(),
           wasmAvailable: fc.boolean(),
           memoryGB: fc.option(fc.integer({ min: 0, max: 32 })),
+          isMobileDevice: fc.boolean(),
         }),
         (input) => {
           const result = decide(input);
-          const { webgpuAvailable, wasmAvailable, memoryGB } = input;
+          const { webgpuAvailable, wasmAvailable, memoryGB, isMobileDevice } = input;
 
           const enoughMemory = memoryGB === null || memoryGB >= 4;
 
@@ -51,6 +52,12 @@ describe("decide - property test", () => {
           expect(result.webgpuAvailable).toBe(webgpuAvailable);
           expect(result.wasmAvailable).toBe(wasmAvailable);
           expect(result.memoryGB).toBe(memoryGB);
+
+          // modelTier is "compact" iff the device is mobile or reports less
+          // than the full-model memory threshold (8 GB); "full" otherwise.
+          // Independent of selectedEngine/missingCapabilities precedence.
+          const expectsCompactTier = isMobileDevice || (memoryGB !== null && memoryGB < 8);
+          expect(result.modelTier).toBe(expectsCompactTier ? "compact" : "full");
         },
       ),
       { numRuns: 100 },

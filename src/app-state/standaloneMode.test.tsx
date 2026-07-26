@@ -77,13 +77,19 @@ describe("AppStateProvider - functional equivalence in Standalone_Mode (11.4, 11
     return { ensureModelAvailable: vi.fn().mockResolvedValue(undefined) };
   }
 
-  const ANY_PROBE: DecideInput = { webgpuAvailable: true, wasmAvailable: true, memoryGB: 8 };
+  const ANY_PROBE: DecideInput = {
+    webgpuAvailable: true,
+    wasmAvailable: true,
+    memoryGB: 8,
+    isMobileDevice: false,
+  };
   const RESULT_WITH_ENGINE: CompatibilityResult = {
     webgpuAvailable: true,
     wasmAvailable: false,
     memoryGB: 8,
     selectedEngine: "webgpu",
     missingCapabilities: [],
+    modelTier: "full",
   };
 
   function EngineReadyAndStandaloneModeProbe() {

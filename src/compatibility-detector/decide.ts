@@ -6,12 +6,21 @@
 /** Selected inference engine, or "none" in degraded mode. */
 export type SelectedEngine = "webgpu" | "wasm" | "none";
 
+/**
+ * Which model size to load: "full" (`MODEL_ID_FULL`, ~2.26 GB VRAM) on
+ * desktop-class devices, "compact" (`MODEL_ID_COMPACT`, ~0.88 GB VRAM) on
+ * memory-constrained devices such as phones. See `configuration.ts`.
+ */
+export type ModelTier = "full" | "compact";
+
 /** Environment probe input (already performed by `detect()`, I/O). */
 export interface DecideInput {
   webgpuAvailable: boolean;
   wasmAvailable: boolean;
   /** null if the browser does not expose navigator.deviceMemory */
   memoryGB: number | null;
+  /** Best-effort mobile-device signal (Requirement 1, model tier). See `detect.ts`. */
+  isMobileDevice: boolean;
 }
 
 /** Pure, serializable result of the compatibility decision. */
@@ -22,14 +31,28 @@ export interface CompatibilityResult {
   selectedEngine: SelectedEngine;
   /** e.g. ["webgpu", "wasm"] or ["memory"] */
   missingCapabilities: string[];
+  /** Which model size `AppStateProvider` should load; only meaningful when `selectedEngine !== "none"`. */
+  modelTier: ModelTier;
 }
 
 const MIN_MEMORY_GB = 4;
 
 /**
+ * Minimum reported `memoryGB` to consider the full-size model (~2.26 GB
+ * VRAM) safe to load. `navigator.deviceMemory` is quantized to powers of 2
+ * and capped at 8 (per spec), so a typical phone reports the same 4 or 8 GB
+ * as a modest laptop -- "8" is the only value that reliably means "this
+ * device reports the maximum tier", the sole safe margin for a ~2.26 GB
+ * model. Independent of `isMobileDevice`: either signal alone is enough to
+ * fall back to the compact model.
+ */
+const MIN_MEMORY_GB_FULL_MODEL = 8;
+
+/**
  * PURE function subject to PBT (Property 1): given the environment probe
- * results, decides which inference engine to use (or degraded mode) and
- * the missing capabilities that explain that decision.
+ * results, decides which inference engine to use (or degraded mode), the
+ * missing capabilities that explain that decision, and which model size is
+ * safe to load.
  *
  * Rules (derived from 1.3, 1.4, 1.5, 1.7, 1.8, 10.6), evaluated in this
  * precedence order:
@@ -39,9 +62,16 @@ const MIN_MEMORY_GB = 4;
  * 3. If not `webgpuAvailable` but `wasmAvailable` -> `selectedEngine = "wasm"`.
  * 4. If neither is available -> `selectedEngine = "none"`,
  *    `missingCapabilities` includes `"webgpu"` and `"wasm"`.
+ *
+ * Independently of the above, `modelTier` is `"compact"` when
+ * `isMobileDevice` is true or when `memoryGB` is below
+ * `MIN_MEMORY_GB_FULL_MODEL`; otherwise `"full"`. This doesn't affect
+ * `selectedEngine`/`missingCapabilities` precedence: a device can be
+ * incompatible (`selectedEngine === "none"`) with any `modelTier` value,
+ * which is simply unused in that case (no model is loaded).
  */
 export function decide(input: DecideInput): CompatibilityResult {
-  const { webgpuAvailable, wasmAvailable, memoryGB } = input;
+  const { webgpuAvailable, wasmAvailable, memoryGB, isMobileDevice } = input;
 
   const insufficientMemory = memoryGB !== null && memoryGB < MIN_MEMORY_GB;
 
@@ -62,11 +92,15 @@ export function decide(input: DecideInput): CompatibilityResult {
     missingCapabilities = ["webgpu", "wasm"];
   }
 
+  const modelTier: ModelTier =
+    isMobileDevice || (memoryGB !== null && memoryGB < MIN_MEMORY_GB_FULL_MODEL) ? "compact" : "full";
+
   return {
     webgpuAvailable,
     wasmAvailable,
     memoryGB,
     selectedEngine,
     missingCapabilities,
+    modelTier,
   };
 }

@@ -255,6 +255,20 @@ Este plan traduce el diseño técnico (React + Vite + TypeScript, WebLLM, vite-p
     - Coordinar con el Requisito 9 (detección de actualizaciones) para que Amplify no sirva versiones cacheadas obsoletas de esos dos archivos
     - _Requirements: 12.5_
 
+- [x] 25. Seleccionar el tamaño del modelo según la capacidad del dispositivo (evitar OOM en celulares)
+  - [x] 25.1 Agregar `MODEL_ID_FULL`/`MODEL_ID_COMPACT` y `modelIdForTier()` en `configuration.ts`
+    - `MODEL_ID_COMPACT` (`Llama-3.2-1B-Instruct-q4f16_1-MLC`, ~0.88 GB VRAM) reemplaza a `MODEL_ID_FULL` (`Llama-3.2-3B-Instruct-q4f16_1-MLC`, ~2.26 GB VRAM) en dispositivos limitados
+    - _Requirements: 1.10_
+  - [x] 25.2 Extender `Detector_Compatibilidad` con `nivelModelo`
+    - `detect()` agrega el sondeo `isMobileDevice` (User-Agent Client Hints con fallback a User-Agent string); `decide()` agrega la regla pura de `modelTier` ("compacto" si es móvil o `memoryGB < 8`), independiente de la precedencia existente de `selectedEngine`/`missingCapabilities`
+    - _Requirements: 1.9_
+  - [x] 25.3 Mover `modelId` de la construcción de `InferenceEngine` a `initialize(engine, modelId)`
+    - Necesario porque el modelo a cargar depende de `nivelModelo`, resuelto por `decide()` después de que la instancia de `InferenceEngine` ya existe (memoizada en `AppStateProvider`)
+    - _Requirements: 1.10_
+  - [x] 25.4 Actualizar el marcador de versión de `Service_Worker_App` a un identificador de conjunto de modelos, no de un modelo puntual
+    - Evita purgar Cache_Modelo en cada activación para dispositivos en nivel "compacto"
+    - _Requirements: 1.10_
+
 ## Notes
 
 - Las tareas marcadas con `*` son opcionales (pruebas) y pueden omitirse para un MVP más rápido; el modelo NO debe implementarlas salvo indicación explícita.
