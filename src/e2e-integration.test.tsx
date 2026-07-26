@@ -497,7 +497,7 @@ describe("e2e integration - online/offline boot scenarios with and without prior
 
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Mensaje" })).toBeInTheDocument();
-    expect(initialize).toHaveBeenCalledWith("webgpu", MODEL_ID_FULL);
+    expect(initialize).toHaveBeenCalledWith("webgpu", MODEL_ID_FULL, undefined);
   });
 });
 

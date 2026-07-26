@@ -48,6 +48,28 @@ describe("InferenceEngineWebLLM.initialize", () => {
     expect(engineFactory).toHaveBeenCalledWith("test-model", "webgpu", {});
   });
 
+  it("passes contextWindowSize through to the engine factory as chatOptions.context_window_size (Requirement 1: reduce KV-cache memory on mobile)", async () => {
+    const { engine } = createFakeMlcEngine([]);
+    const engineFactory: MlcEngineFactory = vi.fn().mockResolvedValue(engine);
+    const inferenceEngine = new InferenceEngineWebLLM(engineFactory);
+
+    await inferenceEngine.initialize("webgpu", "test-model", 2048);
+
+    expect(engineFactory).toHaveBeenCalledWith("test-model", "webgpu", {
+      chatOptions: { context_window_size: 2048 },
+    });
+  });
+
+  it("does NOT include chatOptions when contextWindowSize is omitted (full tier: keep the model's own default)", async () => {
+    const { engine } = createFakeMlcEngine([]);
+    const engineFactory: MlcEngineFactory = vi.fn().mockResolvedValue(engine);
+    const inferenceEngine = new InferenceEngineWebLLM(engineFactory);
+
+    await inferenceEngine.initialize("webgpu", "test-model");
+
+    expect(engineFactory).toHaveBeenCalledWith("test-model", "webgpu", {});
+  });
+
   it("rejects with EngineInitializationError(cause='insufficient_memory') on a DeviceLostError (Requisito 8.1)", async () => {
     const originalError = new Error("device lost");
     originalError.name = "DeviceLostError";
@@ -229,6 +251,15 @@ describe("classifyInitializationError", () => {
       );
       error.name = name;
       expect(classifyInitializationError(error)).toBe("unsupported_gpu_feature");
+    },
+  );
+
+  it.each(["WebGPUNotAvailableError", "WebGPUNotFoundError"])(
+    "classifies an error with name='%s' as gpu_unavailable (Requirement 1: WebLLM's own internal detectGPUDevice() call failing independently of our probe)",
+    (name) => {
+      const error = new Error("WebGPU is not supported in your current environment.");
+      error.name = name;
+      expect(classifyInitializationError(error)).toBe("gpu_unavailable");
     },
   );
 

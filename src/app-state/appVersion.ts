@@ -9,4 +9,4 @@
 // `REQUIRED_MODEL_VERSION` (`src/service-worker-app/sw.ts`) and `MODEL_ID_*`
 // (`configuration.ts`) -- fixed as a source-code constant in the absence of
 // a build-level versioning pipeline.
-export const APP_VERSION = "26.7.0.0";
+export const APP_VERSION = "26.7.0.1";

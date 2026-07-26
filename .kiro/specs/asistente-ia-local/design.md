@@ -241,6 +241,30 @@ proactivamente), `Motor_Inferencia.classifyInitializationError` también clasifi
 `ShaderF16SupportError`/`FeatureSupportError` como una causa específica
 (`unsupported_gpu_feature`), con un mensaje de Modo_Degradado accionable en vez del genérico.
 
+**Nota honesta sobre el estado del diagnóstico.** El fix de `soporteShaderF16` de arriba no
+resolvió el caso real reportado: en el mismo dispositivo Android, el mensaje de Modo_Degradado
+siguió siendo el genérico (`other_cause`), no el específico de `unsupported_gpu_feature` — o sea,
+el error real en ese dispositivo no es `ShaderF16SupportError`. Sin poder inspeccionar la consola
+real del dispositivo (no hay forma de depuración remota disponible), los criterios 1.13 y 1.14
+son mitigaciones/mejoras de visibilidad best-effort, no una causa raíz confirmada:
+
+- **`classifyInitializationError` ahora también distingue `gpu_unavailable`** (criterio 1.14):
+  `MLCEngine.reload()` hace su propia llamada interna a `detectGPUDevice()`, independiente del
+  `requestAdapter()` que ya hace `probeWebgpu()` en la sonda inicial. Si esa segunda negociación
+  falla aunque la primera haya reportado éxito (driver Android de gama baja inestable, pérdida de
+  contexto GPU entre ambas sondas), WebLLM lanza `WebGPUNotAvailableError`/`WebGPUNotFoundError`,
+  detectadas por nombre igual que `DeviceLostError`/`ShaderF16SupportError`. No se sabe si esta es
+  la causa real del bug reportado; el valor concreto es que, si lo es, la próxima vez el mensaje
+  de Modo_Degradado va a ser específico en vez del genérico, cerrando el diagnóstico con certeza.
+- **`context_window_size` reducido en el nivel compacto** (criterio 1.13, `CONTEXT_WINDOW_SIZE_COMPACT
+  = 2048` en `configuration.ts`, la mitad del default de 4096 de todo el catálogo Llama-3.2):
+  mitigación para un comportamiento distinto observado en iOS/Safari, donde el modelo carga
+  correctamente pero la pestaña crashea **durante la generación** (no en el arranque) — consistente
+  con un pico de memoria por crecimiento del KV-cache mientras genera texto, chocando contra el
+  límite de memoria por pestaña de Safari. iOS no expone ninguna señal de memoria desde JS
+  (`navigator.deviceMemory` no existe en Safari), así que este ajuste es un paso acotado y de bajo
+  riesgo, no una respuesta medida a una restricción observada.
+
 ### Motor_Inferencia
 
 Envuelve `MLCEngine` de WebLLM detrás de una interfaz propia y expone una máquina de estados explícita para el ciclo de generación (usada por la Property 5).
@@ -275,7 +299,9 @@ interface MotorInferencia {
   // `modeloId` se recibe recién acá (no en construcción) porque depende de
   // `nivelModelo`, resuelto por Detector_Compatibilidad.decidir() después de
   // que la instancia de MotorInferencia ya existe (Requisito 1.9, 1.10).
-  inicializar(motor: "webgpu" | "wasm", modeloId: string): Promise<void>;
+  // `ventanaContexto`, cuando se provee, sobreescribe el default del propio
+  // modelo (Requisito 1.13); `undefined` lo deja sin cambios.
+  inicializar(motor: "webgpu" | "wasm", modeloId: string, ventanaContexto?: number): Promise<void>;
   generar(historial: Mensaje[]): AsyncIterable<string>; // yields fragmentos de texto
   cancelar(): void;
 }
@@ -537,6 +563,7 @@ La estrategia general es: **todo fallo se traduce en un mensaje visible y accion
 | Error durante generación de respuesta (8.2) | Excepción/rechazo dentro de `MotorInferencia.generar` | `reducirGeneracion` transiciona a `"error"`; se descarta texto parcial, se conserva mensaje de usuario, se ofrece reintento |
 | Fallo de inicialización del motor por memoria (8.1) | Excepción de `MLCEngine.reload` clasificada como OOM | Mensaje específico de memoria insuficiente + Modo_Degradado |
 | Fallo de inicialización del motor por GPU sin `shader-f16` (1.11, 1.12, red de seguridad) | `ShaderF16SupportError`/`FeatureSupportError`, si el sondeo proactivo de `soporteShaderF16` no lo evitó | Mensaje específico ("GPU no soporta una función gráfica necesaria") + Modo_Degradado |
+| Inconsistencia de disponibilidad de WebGPU entre la sonda inicial y la inicialización real (1.14, mejora de visibilidad, causa raíz no confirmada) | `WebGPUNotAvailableError`/`WebGPUNotFoundError` de la propia `detectGPUDevice()` interna de WebLLM | Mensaje específico sugiriendo recargar + Modo_Degradado |
 | Fallo de inicialización del motor por otra causa (8.5) | Cualquier otra excepción de inicialización | Mensaje genérico de fallo de inicialización + Modo_Degradado |
 | Fallo de escritura al exportar (7.2) | Excepción de la API de descarga de archivos | Informar error, no se genera archivo parcial (se escribe solo tras serializar completamente en memoria) |
 | Importación de archivo inválido (7.4) | `parsearImportacion` retorna `ok: false` | Mensaje de error específico (`json_invalido` \| `esquema_invalido`), Almacen_Conversaciones sin cambios |
