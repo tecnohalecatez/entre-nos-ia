@@ -27,6 +27,13 @@ exports[`ChatInterface — responsive design (10.1, 10.2, 10.3) > DOM structure 
       >
         WebGPU
       </span>
+      <span
+        aria-label="Versión de la aplicación 26.7.0.0"
+        class="app-version-label"
+      >
+        v
+        26.7.0.0
+      </span>
     </div>
     <div
       class="chat-interface__header-actions"
