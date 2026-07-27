@@ -54,6 +54,7 @@ function createTestContext(overrides: Partial<AppStateContextValue> = {}): AppSt
     loading: false,
     degradedMode: null,
     engineReady: true,
+    modelLoadProgress: null,
     generationState: { type: "idle" },
     dispatchGeneration: vi.fn(),
     inferenceEngine: createFakeInferenceEngine().inferenceEngine,

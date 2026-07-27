@@ -43,7 +43,11 @@ import {
   createDefaultMlcEngineFactory,
   EngineInitializationError,
 } from "../inference-engine/InferenceEngine";
-import type { MlcEngineFactory, InferenceEngine } from "../inference-engine/InferenceEngine";
+import type {
+  MlcEngineFactory,
+  InferenceEngine,
+  InitializationProgressReport,
+} from "../inference-engine/InferenceEngine";
 import { reduceGeneration } from "../inference-engine/reduceGeneration";
 import type { GenerationState } from "../inference-engine/reduceGeneration";
 import { ConversationManager } from "../conversation-manager/ConversationManager";
@@ -56,6 +60,8 @@ import { AppStateContext } from "./context";
 import type { DegradedModeCause } from "./degradedMode";
 import { causeFromIncompatibility, degradedModeMessage } from "./degradedMode";
 import { modelIdForTier, contextWindowSizeForTier } from "./configuration";
+import { parseModelLoadProgress } from "./modelLoadProgress";
+import type { ModelLoadProgress } from "./modelLoadProgress";
 
 export interface AppStateProviderProps {
   children: ReactNode;
@@ -65,7 +71,7 @@ export interface AppStateProviderProps {
    */
   detectFn?: typeof detect;
   decideFn?: typeof decide;
-  createInferenceEngine?: () => InferenceEngine;
+  createInferenceEngine?: (onProgress: (report: InitializationProgressReport) => void) => InferenceEngine;
   createConversationManager?: () => ConversationManager;
   /**
    * Defaults to `createDefaultModelDownloadManager()` (real fetch/Cache
@@ -97,8 +103,8 @@ const deferredMlcEngineFactory: MlcEngineFactory = async (modelId, engine, optio
   return createDefaultMlcEngineFactory(CreateMLCEngine)(modelId, engine, options);
 };
 
-function createDefaultInferenceEngine(): InferenceEngine {
-  return new InferenceEngineWebLLM(deferredMlcEngineFactory);
+function createDefaultInferenceEngine(onProgress: (report: InitializationProgressReport) => void): InferenceEngine {
+  return new InferenceEngineWebLLM(deferredMlcEngineFactory, onProgress);
 }
 
 function createDefaultConversationManager(): ConversationManager {
@@ -138,12 +144,23 @@ export function AppStateProvider({
   const [loading, setLoading] = useState(true);
   const [degradedMode, setDegradedMode] = useState<DegradedModeCause | null>(null);
   const [engineReady, setEngineReady] = useState(false);
+  const [modelLoadProgress, setModelLoadProgress] = useState<ModelLoadProgress | null>(null);
 
   const [generationState, dispatchGeneration] = useReducer(reduceGeneration, {
     type: "idle",
   } as GenerationState);
 
-  const inferenceEngine = useMemo(() => createInferenceEngine(), [createInferenceEngine]);
+  // Stable identity (deps: []) so it doesn't cause `inferenceEngine` below to
+  // be re-created on every render -- `setModelLoadProgress` itself is stable
+  // (React guarantee), so this closure never needs to change.
+  const handleInitializationProgress = useCallback((report: InitializationProgressReport) => {
+    setModelLoadProgress(parseModelLoadProgress(report));
+  }, []);
+
+  const inferenceEngine = useMemo(
+    () => createInferenceEngine(handleInitializationProgress),
+    [createInferenceEngine, handleInitializationProgress],
+  );
   const conversationManager = useMemo(
     () => createConversationManager(),
     [createConversationManager],
@@ -357,6 +374,7 @@ export function AppStateProvider({
       loading,
       degradedMode,
       engineReady,
+      modelLoadProgress,
       generationState,
       dispatchGeneration,
       inferenceEngine,
@@ -375,6 +393,7 @@ export function AppStateProvider({
       loading,
       degradedMode,
       engineReady,
+      modelLoadProgress,
       generationState,
       inferenceEngine,
       conversationManager,

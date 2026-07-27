@@ -74,6 +74,40 @@
   animation: indeterminate-progress 1.4s ease-in-out infinite;
 }
 
+/*
+ * Determinate variant, used once `ModelLoadProgressIndicator` has a real
+ * WebLLM progress report (Requisito 2.2): the bar's fill tracks
+ * `--model-load-progress-percentage` (set inline per render) instead of
+ * looping the indeterminate sweep animation.
+ */
+.state-screen__progress-bar--determinate::after {
+  width: var(--model-load-progress-percentage, 0%);
+  animation: none;
+  transition: width 0.3s ease-out;
+}
+
+.model-load-progress {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  max-width: 220px;
+}
+
+.model-load-progress__phase {
+  font-size: 13px;
+  color: var(--text-h);
+  font-weight: 500;
+}
+
+.model-load-progress__detail,
+.model-load-progress__model {
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0.8;
+}
+
 @keyframes soft-pulse {
   0%,
   100% {

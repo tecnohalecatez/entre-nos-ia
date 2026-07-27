@@ -312,6 +312,39 @@ interface MotorInferencia {
 - En `error`, no queda texto parcial visible como mensaje del asistente (se descarta `textoParcial`).
 - En `cancelado`, el texto parcial generado hasta el momento se conserva como contenido válido.
 
+### Progreso de carga del modelo (`modelLoadProgress.ts`)
+
+Cableado del Requisito 2.2 en el camino real de arranque (no en `Gestor_Descarga_Modelo`, que no se
+invoca ahí -- ver nota de diseño en `AppStateProvider.tsx`). `MotorInferencia.inicializar()` recibe
+un callback de progreso (`onInitializationProgress`, pasado como `initProgressCallback` a
+`CreateMLCEngine`) que WebLLM invoca repetidamente mientras carga el modelo.
+
+WebLLM reporta **4 fases independientes**, verificado leyendo su código fuente instalado
+(`fetchTensorCacheInternal` y `reload()` en `@mlc-ai/web-llm`). Cada fase tiene su propio
+`progress` de 0 a 1 que **se reinicia** al pasar a la siguiente -- no existe un "total" combinado
+que venga del SDK:
+
+| Fase | `text` reportado por WebLLM (fuente) | Fase de dominio (`ModelLoadPhase`) |
+|---|---|---|
+| 1 | `"Start to fetch params"` | `starting` |
+| 2 | `"Fetching param cache[6/23]: 512MB fetched. 62% completed, 14 secs elapsed. ..."` | `downloading` |
+| 3 | `"Loading model from cache[6/23]: 512MB loaded. 62% completed, 14 secs elapsed."` | `loading_weights` |
+| 4 | `"Loading GPU shader modules[80/120]: 66% completed, 3 secs elapsed."` | `compiling_shaders` |
+| 5 | `"Finish loading on WebGPU - <gpu>"` (`progress: 1`) | `ready` |
+
+Por eso `ModelLoadProgressIndicator` muestra el porcentaje **por fase** (con su etiqueta en
+español) en vez de un progreso global inventado con pesos fijos: mostrar un total combinado
+requeriría estimar cuánto pesa cada fase relativa a las otras, algo que el SDK no expone y que
+variaría según el modelo/dispositivo.
+
+`parseModelLoadProgress(reporte)` es una función PURA que deriva la fase por el *prefijo* del
+`text` del reporte (no por orden de llamada), con fallback a `starting` ante un texto no
+reconocido -- si una futura versión de WebLLM cambia la redacción, se pierde detalle de esa fase
+puntual pero la UI nunca rompe ni queda con datos obsoletos. El campo `modelTier`/
+`shaderF16Available` ya resueltos por `Detector_Compatibilidad` se usan además para mostrar qué
+variante de modelo concreta se cargó (`modelDescriptorForTier()`, `configuration.ts`) -- visible en
+el dispositivo real para el diagnóstico abierto de Android/iOS (ver nota más abajo).
+
 ### Validador de mensajes de entrada
 
 Función pura usada por la Interfaz_Chat antes de invocar al Motor_Inferencia (Requisitos 4.6, 4.8):
@@ -348,6 +381,19 @@ interface GestorDescargaModelo {
 }
 ```
 
+**Estado en runtime (nota de diseño):** este componente está completamente implementado y
+cubierto por PBT (`src/model-download-manager/`), pero `AppStateProvider` **no lo invoca** durante
+el arranque real. `MLCEngine` (WebLLM) resuelve y descarga los shards de pesos internamente a
+partir del `model_id`, sin exponer un único archivo con una URL propia contra la cual aplicar
+`asegurarModeloDisponible`/`verificarIntegridad` — no hay, hoy, un pipeline propio de un solo
+archivo al que este componente pueda apuntar. El Requisito 2.4 (verificación de integridad) queda
+satisfecho en producción por WebLLM mismo, no por este módulo.
+
+`GestorDescargaModelo` se mantiene como componente probado y listo para el día en que el Sistema
+sirva pesos propios (p. ej. desde un bucket S3 propio en vez del catálogo de MLC-AI en Hugging
+Face): en ese escenario sí habría una URL de un solo archivo por shard contra la cual verificar
+checksum antes de servir desde `Cache_Modelo`, y este componente se conectaría sin cambios.
+
 ### Service_Worker_App
 
 Basado en Workbox (vía `vite-plugin-pwa`), con dos estrategias de cacheo separadas:
@@ -370,6 +416,15 @@ function decidirFuenteRespuesta(input: {
 Reglas (derivadas de 3.4, 3.5, 3.6):
 - Si `!online`: responde desde el cache correspondiente si está presente (`"cache"`); si no está presente, `"sin-respuesta"` (dispara el flujo de bloqueo de 3.5).
 - Si `online`: para assets, *stale-while-revalidate* (`"red-luego-cache"`); para recursos de modelo ya verificados en `Cache_Modelo`, `"cache"` (evita re-descarga, 2.5).
+
+**Estado en runtime (nota de diseño):** la ruta manual de `Cache_Modelo` en `sw.ts`
+(`MODEL_RESOURCE_PREFIX = "/models/"`, mismo origen) nunca se dispara hoy: WebLLM descarga los
+shards de pesos cross-origin, directamente desde el CDN de Hugging Face gestionado por MLC-AI, no
+desde una ruta propia del Sistema. Se mantiene por el mismo motivo que `GestorDescargaModelo`
+(arriba): es la ruta que activaría un futuro despliegue con pesos propios servidos desde el mismo
+origen (p. ej. S3 detrás de la misma distribución). El `globIgnores: ['**/modelos/**']` de
+`vite.config.ts` filtra un mecanismo distinto (qué queda fuera del precache generado en build) y
+no necesita coincidir en string con este prefijo de ruta en runtime.
 
 El ciclo de vida de actualización (Requisito 9) usa el patrón estándar de Workbox: `skipWaiting()` diferido hasta mensaje explícito del cliente (`postMessage({type: "SKIP_WAITING"})`), disparado solo cuando el usuario acepta la notificación de actualización y cuando `EstadoGeneracion.tipo !== "generando"`.
 

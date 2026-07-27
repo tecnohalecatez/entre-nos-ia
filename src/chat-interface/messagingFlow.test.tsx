@@ -201,6 +201,7 @@ function CancellationHarness({ inferenceEngine }: { inferenceEngine: InferenceEn
     loading: false,
     degradedMode: null,
     engineReady: true,
+    modelLoadProgress: null,
     generationState,
     dispatchGeneration,
     inferenceEngine,
