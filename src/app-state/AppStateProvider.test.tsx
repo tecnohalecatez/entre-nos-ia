@@ -11,7 +11,7 @@
 // requirements.md (1.3, 1.8, 2.1, 2.5, 3.5, 8.1, 8.4, 8.5, 10.6).
 
 import "fake-indexeddb/auto";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { NotificationProvider } from "../notification";
 import { AppStateProvider } from "./AppStateProvider";
@@ -27,6 +27,7 @@ import { MODEL_ID_FULL, MODEL_ID_FULL_F32, MODEL_ID_COMPACT, MODEL_ID_COMPACT_F3
 import { ModelDownloadError } from "../model-download-manager/ensureModelAvailable";
 import type { ModelDownloadManager } from "../model-download-manager/ensureModelAvailable";
 import type { AppStateProviderProps } from "./AppStateProvider";
+import { markGenerationStarted } from "./sessionDiagnostics";
 
 beforeEach(() => {
   // fake-indexeddb doesn't isolate automatically between tests (same
@@ -66,11 +67,13 @@ const ANY_PROBE: DecideInput = {
 /** Test helper component: exposes the context state as rendered text. */
 function AppStateProbe() {
   const { loading, degradedMode, engineReady, compatibility } = useAppState();
+  const detail = degradedMode?.type === "engine_init_failure" ? degradedMode.detail : undefined;
   return (
     <div>
       <p data-testid="loading">{String(loading)}</p>
       <p data-testid="engine-ready">{String(engineReady)}</p>
       <p data-testid="degraded-mode">{degradedMode === null ? "null" : degradedModeMessage(degradedMode)}</p>
+      <p data-testid="degraded-mode-detail">{detail ?? "null"}</p>
       <p data-testid="selected-engine">{compatibility?.selectedEngine ?? "null"}</p>
     </div>
   );
@@ -404,6 +407,60 @@ describe("AppStateProvider - Degraded_Mode activation", () => {
     expect(screen.getByTestId("degraded-mode").textContent).toContain("No se pudo descargar el modelo de IA");
   });
 
+  it("activates Degraded_Mode with cause unsupported_gpu_limits and a device-specific message when the GPU/driver doesn't meet WebLLM's WebGPU limits (a real Mali/Adreno mobile-driver failure mode)", async () => {
+    const decideFn = vi.fn(
+      (): CompatibilityResult => ({
+        webgpuAvailable: true,
+        wasmAvailable: false,
+        memoryGB: 8,
+        selectedEngine: "webgpu",
+        missingCapabilities: [],
+        modelTier: "full",
+        shaderF16Available: true,
+      }),
+    );
+    const gpuLimitError = new Error(
+      "Cannot initialize runtime because of requested maxStorageBuffersPerShaderStage exceeds limit. requested=10, limit=8. ",
+    );
+    const { inferenceEngine } = createFakeInferenceEngine({
+      initialize: vi.fn().mockRejectedValue(new EngineInitializationError("unsupported_gpu_limits", gpuLimitError)),
+    });
+
+    renderWithProviders({ decideFn, createInferenceEngine: () => inferenceEngine });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("degraded-mode").textContent).not.toBe("null");
+    });
+    expect(screen.getByTestId("degraded-mode").textContent).toContain(
+      "no cumple los límites mínimos que necesita el motor de IA",
+    );
+  });
+
+  it("includes the raw underlying error as 'detail' on an engine_init_failure, so it can be shown on-device without devtools (App.tsx's 'Detalles técnicos')", async () => {
+    const decideFn = vi.fn(
+      (): CompatibilityResult => ({
+        webgpuAvailable: true,
+        wasmAvailable: false,
+        memoryGB: 8,
+        selectedEngine: "webgpu",
+        missingCapabilities: [],
+        modelTier: "full",
+        shaderF16Available: true,
+      }),
+    );
+    const originalError = new Error("Out of memory while allocating buffer");
+    const { inferenceEngine } = createFakeInferenceEngine({
+      initialize: vi.fn().mockRejectedValue(new EngineInitializationError("insufficient_memory", originalError)),
+    });
+
+    renderWithProviders({ decideFn, createInferenceEngine: () => inferenceEngine });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("degraded-mode-detail").textContent).not.toBe("null");
+    });
+    expect(screen.getByTestId("degraded-mode-detail").textContent).toContain("Out of memory while allocating buffer");
+  });
+
   it("activates Degraded_Mode when ensureModelAvailable() fails definitively (8.4)", async () => {
     const decideFn = vi.fn(
       (): CompatibilityResult => ({
@@ -489,6 +546,40 @@ describe("AppStateProvider - Degraded_Mode activation", () => {
   });
 });
 
+describe("AppStateProvider - previous-session crash detection (sessionDiagnostics)", () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+  });
+
+  afterEach(() => {
+    window.sessionStorage.clear();
+  });
+
+  it("shows a notification when the previous session left the 'generating' marker set with no known reload reason (likely a crash mid-generation)", async () => {
+    markGenerationStarted();
+    const { inferenceEngine } = createFakeInferenceEngine();
+
+    renderWithProviders({ decideFn: decide, createInferenceEngine: () => inferenceEngine });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("engine-ready").textContent).toBe("true");
+    });
+    const alerts = screen.getAllByRole("alert");
+    expect(alerts.some((alert) => alert.textContent.includes("se reinició"))).toBe(true);
+  });
+
+  it("shows no crash notification on a normal boot (nothing marked)", async () => {
+    const { inferenceEngine } = createFakeInferenceEngine();
+
+    renderWithProviders({ decideFn: decide, createInferenceEngine: () => inferenceEngine });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("engine-ready").textContent).toBe("true");
+    });
+    expect(screen.queryAllByRole("alert")).toHaveLength(0);
+  });
+});
+
 describe("AppStateProvider - useAppState()", () => {
   it("throws a descriptive error if useAppState() is used outside the provider", () => {
     function ComponentWithoutProvider() {
@@ -554,6 +645,47 @@ describe("AppStateProvider - block initial load when offline (3.5)", () => {
       expect(screen.getByTestId("degraded-mode").textContent).not.toBe("null");
     });
     expect(screen.getByTestId("degraded-mode").textContent).toContain("La descarga del modelo no pudo completarse");
+  });
+
+  it("does NOT report 'no_connection_initial_load' when offline AND the engine init failure is a real device-capability cause (insufficient_memory) -- reporting 'necesitás conexión' there would be misleading (regression: previously ANY offline init failure was reported as a connectivity issue)", async () => {
+    const { inferenceEngine } = createFakeInferenceEngine({
+      initialize: vi
+        .fn()
+        .mockRejectedValue(new EngineInitializationError("insufficient_memory", new Error("Out of memory"))),
+    });
+
+    renderWithProviders({
+      decideFn: decideFnWithEngine,
+      createInferenceEngine: () => inferenceEngine,
+      isBrowserOnline: () => false,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("degraded-mode").textContent).not.toBe("null");
+    });
+    expect(screen.getByTestId("degraded-mode").textContent).toContain("memoria suficiente");
+    expect(screen.getByTestId("degraded-mode").textContent).not.toContain("requiere conexión a internet");
+  });
+
+  it("still reports 'no_connection_initial_load' when offline and the init failure classifies as network_error (the connectivity message remains correct for its actual cause)", async () => {
+    const { inferenceEngine } = createFakeInferenceEngine({
+      initialize: vi
+        .fn()
+        .mockRejectedValue(new EngineInitializationError("network_error", new Error("Failed to fetch"))),
+    });
+
+    renderWithProviders({
+      decideFn: decideFnWithEngine,
+      createInferenceEngine: () => inferenceEngine,
+      isBrowserOnline: () => false,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("degraded-mode").textContent).not.toBe("null");
+    });
+    expect(screen.getByTestId("degraded-mode").textContent).toContain(
+      "La carga inicial de la aplicación requiere conexión a internet",
+    );
   });
 });
 

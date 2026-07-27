@@ -11,6 +11,7 @@
 import type { ChatOptions, CreateMLCEngine as CreateMLCEngineType } from "@mlc-ai/web-llm";
 import type { Message, MessageRole } from "../types/models";
 import { SYSTEM_PROMPT } from "./systemPrompt";
+import { truncateHistory } from "./truncateHistory";
 
 /**
  * Best-effort mitigation for "degenerate repetition" -- the model regenerates
@@ -25,13 +26,57 @@ import { SYSTEM_PROMPT } from "./systemPrompt";
 const REPETITION_PENALTY = 1.15;
 
 /**
- * Safety net: if `REPETITION_PENALTY` doesn't fully prevent a loop, this
- * bounds the worst-case damage instead of generating until the
- * `context_window_size` is exhausted -- most relevant on the "compact" tier,
- * whose context window (`CONTEXT_WINDOW_SIZE_COMPACT`, `configuration.ts`)
- * is only 2048 tokens.
+ * Upper bound on `max_tokens`, used together with `contextWindowSize` (see
+ * `maxTokensForContextWindow()`) instead of a single fixed value: a fixed
+ * 1024 was, on the "compact" tier's 2048-token window
+ * (`CONTEXT_WINDOW_SIZE_COMPACT`, `configuration.ts`), already HALF the
+ * entire window before a single token of history or system prompt is
+ * counted. Scaling it down on smaller windows leaves realistic room for the
+ * prompt itself, while still capping the worst case instead of generating
+ * until the window is exhausted.
  */
-const MAX_TOKENS = 1024;
+const MAX_TOKENS_CEILING = 1024;
+
+/**
+ * Local mirror of `configuration.ts`'s `CONTEXT_WINDOW_SIZE_DEFAULT`.
+ * Duplicated (not imported) on purpose: `inference-engine/` is a lower-level
+ * module that `app-state/configuration.ts` depends on (it decides the model
+ * id/tier and hands `InferenceEngine.initialize()` a resolved
+ * `contextWindowSize` override); importing back from here would invert that
+ * direction. Used only as the fallback for the `max_tokens`/truncation
+ * budget below when `initialize()` was called with `contextWindowSize ===
+ * undefined` (the "full" tier keeps the model's own default unchanged, see
+ * `contextWindowSizeForTier()`) -- every Llama-3.2 catalog entry's own
+ * default is 4096, so this mirrors a real, currently-true fact about the
+ * loaded model rather than an arbitrary guess.
+ */
+const DEFAULT_CONTEXT_WINDOW_SIZE = 4096;
+
+/** Derives the per-request `max_tokens` cap from the model's actual context window. */
+function maxTokensForContextWindow(contextWindowSize: number): number {
+  return Math.min(MAX_TOKENS_CEILING, Math.floor(contextWindowSize / 4));
+}
+
+/**
+ * Rough, deliberately conservative chars-per-token estimate for Llama-3's
+ * tokenizer on Spanish text, used only to size the history-truncation
+ * budget below -- there is no tokenizer available at this layer (running
+ * the real one would mean loading another WASM module just to count).
+ */
+const CHARS_PER_TOKEN_ESTIMATE = 3;
+
+/**
+ * Character budget for the history passed to `truncateHistory()`: the
+ * context window minus what's reserved for the model's own output
+ * (`maxTokens`) and for `SYSTEM_PROMPT` (always prefixed, see
+ * `mapHistoryToOpenAi`), converted to characters via
+ * `CHARS_PER_TOKEN_ESTIMATE`.
+ */
+function estimateHistoryCharBudget(contextWindowSize: number, maxTokens: number): number {
+  const reservedTokens = maxTokens + Math.ceil(SYSTEM_PROMPT.length / CHARS_PER_TOKEN_ESTIMATE);
+  const budgetTokens = Math.max(contextWindowSize - reservedTokens, 0);
+  return budgetTokens * CHARS_PER_TOKEN_ESTIMATE;
+}
 
 /** Message in the role/content format expected by WebLLM's chat API (OpenAI-compatible). */
 export type OpenAiMessage =
@@ -99,6 +144,7 @@ export type EngineInitializationFailureCause =
   | "insufficient_memory"
   | "network_error"
   | "unsupported_gpu_feature"
+  | "unsupported_gpu_limits"
   | "gpu_unavailable"
   | "other_cause";
 
@@ -121,15 +167,46 @@ export class EngineInitializationError extends Error {
           ? "Could not initialize the InferenceEngine: network error while fetching the model."
           : cause === "unsupported_gpu_feature"
             ? "Could not initialize the InferenceEngine: a required GPU feature is not supported."
-            : cause === "gpu_unavailable"
-              ? "Could not initialize the InferenceEngine: WebGPU was unavailable when the engine tried to use it."
-              : "Could not initialize the InferenceEngine."
+            : cause === "unsupported_gpu_limits"
+              ? "Could not initialize the InferenceEngine: the GPU/driver's WebGPU limits are below what the engine requires."
+              : cause === "gpu_unavailable"
+                ? "Could not initialize the InferenceEngine: WebGPU was unavailable when the engine tried to use it."
+                : "Could not initialize the InferenceEngine."
     );
     this.name = "EngineInitializationError";
     this.cause = cause;
     this.originalCause = originalCause;
   }
 }
+
+/**
+ * Patterns matching WebLLM's `detectGPUDevice()` throwing because the
+ * adapter's WebGPU limits (`maxBufferSize`, `maxStorageBufferBindingSize`,
+ * `maxComputeWorkgroupStorageSize`, `maxStorageBuffersPerShaderStage`) fall
+ * below what the engine requests -- a real failure mode on lower-end mobile
+ * GPU drivers (Mali, Adreno, common on budget/mid Android tablets) that
+ * report `webgpuAvailable: true` in `detect.ts`'s probe (a real adapter IS
+ * obtained there) but can't actually satisfy WebLLM's own, separate
+ * `requestDevice()` call. These come as plain `Error` objects (not one of
+ * WebLLM's named/exported error classes), so detection here is
+ * message-based, same as `OOM_MESSAGE_PATTERNS`/`NETWORK_ERROR_PATTERNS`
+ * below. See `node_modules/@mlc-ai/web-llm/lib/index.js`, `detectGPUDevice()`.
+ */
+const GPU_LIMIT_PATTERNS: readonly RegExp[] = [
+  /exceeds limit/i,
+  /maxStorageBuffer/i,
+  /maxBufferSize/i,
+  /maxComputeWorkgroup/i,
+];
+
+/**
+ * `detectGPUDevice()`'s own "no adapter" message. Distinct from
+ * `WebGPUNotAvailableError`/`WebGPUNotFoundError` above (named error
+ * classes from elsewhere in the SDK): this one is a plain `Error` thrown
+ * when `navigator.gpu.requestAdapter()` itself resolves to `null` inside
+ * WebLLM's own call, same underlying cause (`gpu_unavailable`) as those.
+ */
+const GPU_NOT_FOUND_PATTERNS: readonly RegExp[] = [/unable to find a compatible gpu/i];
 
 const OOM_MESSAGE_PATTERNS: readonly RegExp[] = [
   /out[ -]?of[ -]?memory/i,
@@ -193,6 +270,15 @@ function extractErrorDescription(error: unknown): string {
  * `"other_cause"` -- diagnostic visibility for a real-world failure mode
  * observed on-device that doesn't match any of the classifications above.
  *
+ * `GPU_LIMIT_PATTERNS`/`GPU_NOT_FOUND_PATTERNS` (message-based, same
+ * `detectGPUDevice()` call as the paragraph above, but these come as plain,
+ * unnamed `Error`s instead of the named classes): a real adapter was
+ * obtained and DOES report `webgpuAvailable: true`, but its WebGPU limits
+ * (`maxStorageBuffersPerShaderStage`, etc.) are below what WebLLM requires
+ * -- `"unsupported_gpu_limits"`, a fixed capability of that device's
+ * GPU/driver, not something a reload fixes -- or no adapter was found at
+ * all inside this specific call, `"gpu_unavailable"`.
+ *
  * For any other error (including WASM failures without WebGPU), the message
  * is inspected first for common out-of-memory patterns, then for common
  * network-failure patterns (the model's weight shards are fetched from a
@@ -210,6 +296,12 @@ export function classifyInitializationError(error: unknown): EngineInitializatio
     return "gpu_unavailable";
   }
   const description = extractErrorDescription(error);
+  if (GPU_LIMIT_PATTERNS.some((pattern) => pattern.test(description))) {
+    return "unsupported_gpu_limits";
+  }
+  if (GPU_NOT_FOUND_PATTERNS.some((pattern) => pattern.test(description))) {
+    return "gpu_unavailable";
+  }
   if (OOM_MESSAGE_PATTERNS.some((pattern) => pattern.test(description))) {
     return "insufficient_memory";
   }
@@ -271,6 +363,13 @@ export class InferenceEngineWebLLM implements InferenceEngine {
   private mlcEngine: MlcEngine | null = null;
   private readonly engineFactory: MlcEngineFactory;
   private readonly onInitializationProgress: ((report: InitializationProgressReport) => void) | undefined;
+  /**
+   * The `contextWindowSize` `initialize()` was called with, kept only to
+   * size `generate()`'s `max_tokens`/history-truncation budget --
+   * `undefined` when the "full" tier left the model's own default (4096)
+   * unchanged, see `DEFAULT_CONTEXT_WINDOW_SIZE` above.
+   */
+  private contextWindowSize: number | undefined;
 
   constructor(
     engineFactory: MlcEngineFactory,
@@ -281,6 +380,7 @@ export class InferenceEngineWebLLM implements InferenceEngine {
   }
 
   async initialize(engine: "webgpu" | "wasm", modelId: string, contextWindowSize?: number): Promise<void> {
+    this.contextWindowSize = contextWindowSize;
     const options: MlcEngineFactoryOptions = {
       ...(this.onInitializationProgress !== undefined ? { onProgress: this.onInitializationProgress } : {}),
       ...(contextWindowSize !== undefined ? { chatOptions: { context_window_size: contextWindowSize } } : {}),
@@ -298,12 +398,21 @@ export class InferenceEngineWebLLM implements InferenceEngine {
       throw new Error("InferenceEngine.generate() was invoked before initialize() or after an initialization failure.");
     }
 
+    const contextWindowSize = this.contextWindowSize ?? DEFAULT_CONTEXT_WINDOW_SIZE;
+    const maxTokens = maxTokensForContextWindow(contextWindowSize);
+    // Bounds the prompt itself against the same context window (Requirement
+    // 1): without this, a long Conversation is resent in full on every turn
+    // (`useSendMessage.ts` never truncates), silently outgrowing the KV
+    // cache -- the exact OOM vector `contextWindowSizeForTier()` already
+    // shrinks the window to guard against on memory-constrained devices.
+    const truncatedHistory = truncateHistory(history, estimateHistoryCharBudget(contextWindowSize, maxTokens));
+
     return (async function* generateChunks(): AsyncIterable<string> {
       const chunks = await mlcEngine.chat.completions.create({
-        messages: mapHistoryToOpenAi(history),
+        messages: mapHistoryToOpenAi(truncatedHistory),
         stream: true,
         repetition_penalty: REPETITION_PENALTY,
-        max_tokens: MAX_TOKENS,
+        max_tokens: maxTokens,
       });
       for await (const chunk of chunks) {
         const text = chunk.choices[0]?.delta.content;

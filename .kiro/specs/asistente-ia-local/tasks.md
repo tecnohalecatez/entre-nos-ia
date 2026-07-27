@@ -327,6 +327,43 @@ Este plan traduce el diseño técnico (React + Vite + TypeScript, WebLLM, vite-p
     los dos niveles
     - _Requirements: 2.2_
 
+- [x] 30. Diagnóstico visible en el dispositivo + recarga inesperada en móvil/tablet
+  - Reportado: una tablet Android/HarmonyOS mostraba "Asistente no disponible" con el mensaje
+    genérico (causa real oculta, sólo en `console.error`, inaccesible sin devtools); un celular se
+    recargaba solo apenas se enviaba un mensaje, sin ningún `ErrorBoundary`/`location.reload()`
+    propio en el código -- la única recarga posible venía de `vite-plugin-pwa`
+  - [x] 30.1 `degradedMode.ts`/`App.tsx`: `DegradedModeCause` gana un campo `detail` opcional (la
+    descripción cruda del error subyacente, ya logueada, nunca transmitida) mostrado en un bloque
+    colapsado "Detalles técnicos" en la pantalla de Modo_Degradado, para poder diagnosticar en
+    dispositivos sin devtools accesible
+    - _Requirements: 8.1, 8.5_
+  - [x] 30.2 `InferenceEngine.ts`: nueva causa `unsupported_gpu_limits`, clasificando los `Error`
+    planos que WebLLM tira cuando el driver de la GPU no cumple sus límites mínimos de WebGPU
+    (`maxStorageBuffersPerShaderStage`, etc. -- típico en GPUs Mali/Adreno de gama media/baja), antes
+    indistinguibles de `other_cause`; mensaje propio y honesto (no sugiere recargar ni revisar
+    bloqueadores: es una limitación fija del equipo)
+    - _Requirements: 8.5_
+  - [x] 30.3 `AppStateProvider.tsx`: corregir el orden del chequeo de conectividad -- antes,
+    `!isBrowserOnline()` se evaluaba antes de clasificar el error, así que un dispositivo offline
+    reportaba "necesitás conexión" incluso si la causa real era memoria insuficiente o límites de
+    GPU; ahora sólo aplica cuando la causa clasificada es `network_error` u `other_cause`
+    - _Requirements: 3.5, 8.1, 8.5_
+  - [x] 30.4 `registerServiceWorker.ts`: gatear la recarga de página que dispara
+    `vite-plugin-pwa`/`workbox-window` al tomar control un SW nuevo. Sin gate, cualquier
+    `controllerchange` (otra pestaña acepta la actualización, el navegador recicla un worker viejo)
+    recargaba esta pestaña también, sin que su usuario tocara nada -- posible causa de la recarga en
+    celular reportada. Ahora sólo recarga si esta pestaña invocó su propio `sendSkipWaiting()`
+    - _Requirements: 9.4, 9.5_
+  - [x] 30.5 `truncateHistory.ts` + `InferenceEngine.ts`: acotar el historial y el `max_tokens` contra
+    la ventana de contexto real (antes se mandaba el historial completo sin límite, un vector de OOM
+    real en el nivel `compacto` al crecer la conversación) y escalar `max_tokens` según esa ventana
+    (antes fijo en 1024, la mitad entera de la ventana de 2048 del nivel `compacto`)
+    - _Requirements: 1.10_
+  - [x] 30.6 `sessionDiagnostics.ts`: marcadores best-effort en `sessionStorage` para distinguir, en
+    el arranque siguiente, una caída del proceso a mitad de generación de una recarga deliberada
+    conocida (la del punto 30.4), informada mediante notificación cuando corresponde
+    - _Requirements: 8.1_
+
 ## Notes
 
 - Las tareas marcadas con `*` son opcionales (pruebas) y pueden omitirse para un MVP más rápido; el modelo NO debe implementarlas salvo indicación explícita.

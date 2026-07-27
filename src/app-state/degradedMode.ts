@@ -14,7 +14,24 @@ export type DegradedModeCause =
   | { type: "incompatibility"; missingCapabilities: string[] }
   | {
       type: "engine_init_failure";
-      cause: "insufficient_memory" | "network_error" | "unsupported_gpu_feature" | "gpu_unavailable" | "other_cause";
+      cause:
+        | "insufficient_memory"
+        | "network_error"
+        | "unsupported_gpu_feature"
+        | "unsupported_gpu_limits"
+        | "gpu_unavailable"
+        | "other_cause";
+      /**
+       * Raw underlying error description (`${name}: ${message}`, truncated
+       * -- see `describeErrorDetail()` in `AppStateProvider.tsx`), shown in
+       * a collapsed "Detalles técnicos" section (`App.tsx`) so a device
+       * without accessible devtools (a phone, a tablet) can still report
+       * the real cause instead of only the generic Spanish message below.
+       * Never transmitted anywhere (Requisito 6): it's the same text
+       * already printed to `console.error` in `AppStateProvider.tsx`, just
+       * also rendered locally, on-device.
+       */
+      detail?: string;
     }
   | { type: "model_download_failure" }
   | { type: "no_connection_initial_load" };
@@ -37,7 +54,13 @@ function describeMissingCapabilities(missingCapabilities: string[]): string {
 
 /** Message for each possible `engine_init_failure` sub-cause. */
 function engineInitFailureMessage(
-  cause: "insufficient_memory" | "network_error" | "unsupported_gpu_feature" | "gpu_unavailable" | "other_cause",
+  cause:
+    | "insufficient_memory"
+    | "network_error"
+    | "unsupported_gpu_feature"
+    | "unsupported_gpu_limits"
+    | "gpu_unavailable"
+    | "other_cause",
 ): string {
   if (cause === "insufficient_memory") {
     return "El asistente no pudo inicializarse: el dispositivo no cuenta con memoria suficiente.";
@@ -49,6 +72,12 @@ function engineInitFailureMessage(
     // Not something reloading fixes (unlike the generic message below):
     // it's a fixed capability of this device's GPU/driver.
     return "El asistente no pudo inicializarse porque la GPU de este dispositivo no soporta una función gráfica necesaria (shader-f16), algo común en ciertos modelos de celular. No se soluciona recargando la página; probá con otro dispositivo o navegador.";
+  }
+  if (cause === "unsupported_gpu_limits") {
+    // Also a fixed device capability, not something a reload fixes -- see
+    // `classifyInitializationError()`'s `GPU_LIMIT_PATTERNS` comment
+    // (`InferenceEngine.ts`) for the underlying WebLLM error this maps.
+    return "El asistente no pudo inicializarse porque la GPU o el controlador gráfico de este dispositivo no cumple los límites mínimos que necesita el motor de IA. Es una limitación fija de este equipo: no se soluciona recargando la página, desactivando extensiones ni cambiando la configuración de privacidad. Podés intentar con otro dispositivo o navegador.";
   }
   if (cause === "gpu_unavailable") {
     // Unlike unsupported_gpu_feature, this comes from a second, independent

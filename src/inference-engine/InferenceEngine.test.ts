@@ -178,6 +178,43 @@ describe("InferenceEngineWebLLM.generate", () => {
     expect(request.messages[0]).toEqual({ role: "system", content: SYSTEM_PROMPT });
   });
 
+  it("reduces max_tokens on a smaller context window (compact tier) instead of the fixed 1024 ceiling", async () => {
+    const { engine, create } = createFakeMlcEngine([]);
+    const engineFactory: MlcEngineFactory = vi.fn().mockResolvedValue(engine);
+    const inferenceEngine = new InferenceEngineWebLLM(engineFactory);
+    await inferenceEngine.initialize("webgpu", "test-model", 2048);
+
+    await inferenceEngine.generate([createMessage("user", "hola")])[Symbol.asyncIterator]().next();
+
+    const request = create.mock.calls[0]?.[0] as { max_tokens: number };
+    expect(request.max_tokens).toBe(512);
+  });
+
+  it("truncates old history that no longer fits the context window, while always keeping the most recent message (Requirement 1: bound the prompt against a small window)", async () => {
+    const { engine, create } = createFakeMlcEngine([]);
+    const engineFactory: MlcEngineFactory = vi.fn().mockResolvedValue(engine);
+    const inferenceEngine = new InferenceEngineWebLLM(engineFactory);
+    await inferenceEngine.initialize("webgpu", "test-model", 2048);
+
+    // Far larger than the ~2048-token compact window could ever hold.
+    const history: Message[] = Array.from({ length: 50 }, (_unused, index) =>
+      createMessage(index % 2 === 0 ? "user" : "assistant", "X".repeat(200), index),
+    );
+
+    await inferenceEngine.generate(history)[Symbol.asyncIterator]().next();
+
+    const request = create.mock.calls[0]?.[0] as { messages: { role: string; content: string }[] };
+    expect(request.messages[0]).toEqual({ role: "system", content: SYSTEM_PROMPT });
+    // Some truncation happened: not every one of the 50 messages fits.
+    expect(request.messages.length).toBeLessThan(history.length + 1);
+    // The most recent message is never dropped.
+    const lastHistoryMessage = history[history.length - 1];
+    expect(request.messages[request.messages.length - 1]).toEqual({
+      role: "assistant",
+      content: lastHistoryMessage?.content,
+    });
+  });
+
   it("throws if invoked before initialize() has successfully finished", () => {
     const engineFactory: MlcEngineFactory = vi.fn();
     const inferenceEngine = new InferenceEngineWebLLM(engineFactory);
@@ -264,6 +301,24 @@ describe("classifyInitializationError", () => {
       expect(classifyInitializationError(error)).toBe("gpu_unavailable");
     },
   );
+
+  it.each([
+    "Cannot initialize runtime because of requested maxStorageBuffersPerShaderStage exceeds limit. requested=10, limit=8. ",
+    "Cannot initialize runtime because of requested maxBufferSize exceeds limit. requested=1024MB, limit=256MB.",
+    "Cannot initialize runtime because of requested maxStorageBufferBindingSize exceeds limit. requested=1024MB, limit=128MB. ",
+    "Cannot initialize runtime because of requested maxComputeWorkgroupStorageSize exceeds limit. requested=32768, limit=16384. ",
+  ])(
+    "classifies the message %j as unsupported_gpu_limits (Requirement 1: WebLLM's detectGPUDevice() throwing a plain Error when the adapter's WebGPU limits are below what it requests, common on Mali/Adreno mobile drivers)",
+    (message) => {
+      expect(classifyInitializationError(new Error(message))).toBe("unsupported_gpu_limits");
+    },
+  );
+
+  it("classifies WebLLM's own 'Unable to find a compatible GPU' plain Error as gpu_unavailable", () => {
+    const message =
+      "Unable to find a compatible GPU. This issue might be because your computer doesn't have a GPU.";
+    expect(classifyInitializationError(new Error(message))).toBe("gpu_unavailable");
+  });
 
   it("classifies a generic error unrelated to memory or network as other_cause", () => {
     expect(classifyInitializationError(new Error("unexpected worker crash"))).toBe("other_cause");

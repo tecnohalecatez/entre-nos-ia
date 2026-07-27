@@ -54,6 +54,35 @@
   line-height: 155%;
 }
 
+/*
+ * Collapsed "Detalles técnicos" block on the Degraded_Mode screen: shows the
+ * raw underlying error on-device (App.tsx), for devices without accessible
+ * devtools (phones, tablets). Closed by default so it doesn't compete with
+ * the main, human-readable message above it.
+ */
+.state-screen__details {
+  width: 100%;
+  text-align: left;
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0.8;
+}
+
+.state-screen__details summary {
+  cursor: pointer;
+  text-align: center;
+}
+
+.state-screen__details code {
+  display: block;
+  margin-top: 8px;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
 .state-screen__progress-bar {
   width: 100%;
   max-width: 220px;
