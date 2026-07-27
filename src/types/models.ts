@@ -44,7 +44,7 @@ export interface ExportedFile {
  * Cache_Modelo, e.g. in IndexedDB or a record within the cache itself).
  */
 export interface CachedModelMetadata {
-  /** e.g. "Llama-3.2-3B-Instruct-q4f16_1" */
+  /** e.g. "Llama-3.2-1B-Instruct-q4f16_1" */
   modelId: string;
   version: string;
   /** file path -> reference sha256 checksum */

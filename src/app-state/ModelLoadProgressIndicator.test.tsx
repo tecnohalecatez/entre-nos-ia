@@ -84,7 +84,7 @@ describe("ModelLoadProgressIndicator", () => {
     expect(screen.getByText("Descargando el modelo (fragmento 6/23)")).toBeInTheDocument();
     expect(screen.getByText("512 MB · 14 s")).toBeInTheDocument();
     expect(screen.getByText(/Llama 3\.2 1B/)).toBeInTheDocument();
-    expect(screen.getByText(/versión compacta \(móvil\)/)).toBeInTheDocument();
+    expect(screen.getByText(/contexto 2048 \(móvil\)/)).toBeInTheDocument();
 
     const bar = screen.getByRole("progressbar");
     expect(bar).toHaveAttribute("aria-valuenow", "62");
@@ -92,7 +92,7 @@ describe("ModelLoadProgressIndicator", () => {
     expect(bar).toHaveAttribute("aria-valuemax", "100");
   });
 
-  it("shows the desktop/full-size model label when modelTier is 'full'", () => {
+  it("shows the desktop context window size when modelTier is 'full'", () => {
     renderWithContext(
       createTestContext({
         modelLoadProgress: { phase: "ready", percentage: 100, step: null, megabytes: null, secondsElapsed: 22 },
@@ -100,8 +100,8 @@ describe("ModelLoadProgressIndicator", () => {
       }),
     );
 
-    expect(screen.getByText(/Llama 3\.2 3B/)).toBeInTheDocument();
-    expect(screen.getByText(/versión completa \(escritorio\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Llama 3\.2 1B/)).toBeInTheDocument();
+    expect(screen.getByText(/contexto 4096 \(escritorio\)/)).toBeInTheDocument();
   });
 
   it("omits the detail line when there is no step or megabytes to show", () => {

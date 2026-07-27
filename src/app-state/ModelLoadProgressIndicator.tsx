@@ -15,7 +15,7 @@
 
 import { useAppState } from "./useAppState";
 import { modelLoadPhaseLabel } from "./modelLoadProgress";
-import { modelDescriptorForTier } from "./configuration";
+import { modelDescriptorForTier, contextWindowSizeForTier, CONTEXT_WINDOW_SIZE_DEFAULT } from "./configuration";
 
 function formatSizeGb(megabytes: number): string {
   return (megabytes / 1024).toFixed(1).replace(".", ",");
@@ -28,8 +28,14 @@ export function ModelLoadProgressIndicator() {
     compatibility !== null
       ? modelDescriptorForTier(compatibility.modelTier, compatibility.shaderF16Available)
       : null;
+  // `MODEL_ID_FULL`/`MODEL_ID_COMPACT` currently load the same model
+  // (`configuration.ts`), so the loading screen no longer distinguishes
+  // "versión completa"/"versión compacta" -- the context window size is now
+  // the only thing that actually differs between tiers.
+  const contextWindowSize =
+    compatibility !== null ? (contextWindowSizeForTier(compatibility.modelTier) ?? CONTEXT_WINDOW_SIZE_DEFAULT) : null;
   const tierLabel =
-    compatibility?.modelTier === "compact" ? "versión compacta (móvil)" : "versión completa (escritorio)";
+    compatibility?.modelTier === "compact" ? "móvil" : "escritorio";
 
   if (modelLoadProgress === null) {
     return (
@@ -70,9 +76,10 @@ export function ModelLoadProgressIndicator() {
         style={{ ["--model-load-progress-percentage" as string]: `${modelLoadProgress.percentage.toString()}%` }}
       />
       {detailParts.length > 0 ? <p className="model-load-progress__detail">{detailParts.join(" · ")}</p> : null}
-      {modelDescriptor !== null ? (
+      {modelDescriptor !== null && contextWindowSize !== null ? (
         <p className="model-load-progress__model">
-          {modelDescriptor.displayName} · ~{formatSizeGb(modelDescriptor.approximateSizeMb)} GB · {tierLabel}
+          {modelDescriptor.displayName} · ~{formatSizeGb(modelDescriptor.approximateSizeMb)} GB · contexto{" "}
+          {contextWindowSize.toString()} ({tierLabel})
         </p>
       ) : null}
     </div>

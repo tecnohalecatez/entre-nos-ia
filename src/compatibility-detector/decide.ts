@@ -7,9 +7,12 @@
 export type SelectedEngine = "webgpu" | "wasm" | "none";
 
 /**
- * Which model size to load: "full" (`MODEL_ID_FULL`, ~2.26 GB VRAM) on
- * desktop-class devices, "compact" (`MODEL_ID_COMPACT`, ~0.88 GB VRAM) on
- * memory-constrained devices such as phones. See `configuration.ts`.
+ * Selected between desktop-class devices ("full") and memory-constrained
+ * devices such as phones ("compact"). `MODEL_ID_FULL`/`MODEL_ID_COMPACT`
+ * currently load the same model (`configuration.ts`), so today this only
+ * controls `context_window_size` via `contextWindowSizeForTier()` -- kept
+ * as a separate axis so the two tiers can load different-sized models again
+ * without a refactor.
  */
 export type ModelTier = "full" | "compact";
 
@@ -52,13 +55,13 @@ export interface CompatibilityResult {
 const MIN_MEMORY_GB = 4;
 
 /**
- * Minimum reported `memoryGB` to consider the full-size model (~2.26 GB
- * VRAM) safe to load. `navigator.deviceMemory` is quantized to powers of 2
- * and capped at 8 (per spec), so a typical phone reports the same 4 or 8 GB
- * as a modest laptop -- "8" is the only value that reliably means "this
- * device reports the maximum tier", the sole safe margin for a ~2.26 GB
- * model. Independent of `isMobileDevice`: either signal alone is enough to
- * fall back to the compact model.
+ * Minimum reported `memoryGB` to consider `modelTier: "full"` (a wider
+ * `context_window_size`, see `contextWindowSizeForTier()`) safe to use.
+ * `navigator.deviceMemory` is quantized to powers of 2 and capped at 8 (per
+ * spec), so a typical phone reports the same 4 or 8 GB as a modest laptop
+ * -- "8" is the only value that reliably means "this device reports the
+ * maximum tier". Independent of `isMobileDevice`: either signal alone is
+ * enough to fall back to the compact tier.
  */
 const MIN_MEMORY_GB_FULL_MODEL = 8;
 

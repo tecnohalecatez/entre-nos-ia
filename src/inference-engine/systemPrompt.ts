@@ -1,6 +1,6 @@
 // System prompt injected on every request to the Inference_Engine.
 //
-// Without it, `Llama-3.2-3B-Instruct` tends to drift to English, especially
+// Without it, `Llama-3.2-Instruct` tends to drift to English, especially
 // on short inputs like greetings ("hola" -> "How can I assist you today?").
 // This constant fixes the assistant's language and a few baseline behaviors.
 // It is injected in `InferenceEngine.ts` (`mapHistoryToOpenAi`), never

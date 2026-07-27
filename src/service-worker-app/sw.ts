@@ -140,7 +140,7 @@ async function resolveModelRequest(request: Request): Promise<Response> {
  * purge Cache_Modelo on every activation for devices on the compact tier or
  * without shader-f16 support.
  */
-const REQUIRED_MODEL_VERSION = "llama-3.2-3b+1b-q4f16_1+q4f32_1";
+const REQUIRED_MODEL_VERSION = "llama-3.2-1b-q4f16_1+q4f32_1";
 
 /** Small cache name used only to persist the active model version marker. */
 const MODEL_CACHE_METADATA_NAME = "model-cache-metadata";

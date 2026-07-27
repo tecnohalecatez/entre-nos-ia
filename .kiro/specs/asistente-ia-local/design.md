@@ -197,18 +197,26 @@ Reglas de `decidir()` para `motorSeleccionado`/`capacidadesFaltantes` (derivadas
 Regla de `decidir()` para `nivelModelo` (Requisito 1.9, 1.10), independiente de la anterior:
 `nivelModelo = "compacto"` si `esDispositivoMovil` **o** `memoriaGB !== null && memoriaGB < 8`; en cualquier otro caso, `"completo"`.
 
-**Motivación y umbral de 8 GB.** El modelo completo (`Llama-3.2-3B-Instruct-q4f16_1-MLC`) requiere
-~2.26 GB de VRAM según el catálogo de WebLLM. `navigator.deviceMemory` reporta la memoria del
-dispositivo cuantizada a potencias de 2 y con un tope de 8, por lo que un celular típico informa
-los mismos 4 u 8 GB que una notebook modesta: ese valor por sí solo no alcanza para descartar un
-celular con el umbral de 4 GB del Modo_Degradado (criterio 1.8). Sin un segundo gate, un celular
-pasaba la verificación de compatibilidad y el Motor_Inferencia intentaba cargar 2.26 GB en el
-proceso del navegador — en Chrome Android esto agota la memoria del proceso *renderer* y el
-sistema operativo lo mata sin lanzar una excepción de JavaScript, por lo que el `try/catch` que
-activa Modo_Degradado nunca llega a ejecutarse: la pestaña simplemente se cierra. `nivelModelo`
-resuelve esto seleccionando el modelo compacto (`Llama-3.2-1B-Instruct-q4f16_1-MLC`, ~0.88 GB de
-VRAM) en dispositivos móviles o que reportan menos del tope máximo de memoria, sin depender de una
-señal de memoria que en el navegador es demasiado imprecisa como único criterio.
+**Motivación y umbral de 8 GB.** Originalmente el nivel `completo` cargaba
+`Llama-3.2-3B-Instruct-q4f16_1-MLC` (~2.26 GB de VRAM), bastante más pesado que el nivel `compacto`
+(`Llama-3.2-1B-Instruct-q4f16_1-MLC`, ~0.88 GB). `navigator.deviceMemory` reporta la memoria del
+dispositivo cuantizada a potencias de 2 y con un tope de 8, por lo que un celular típico informa los
+mismos 4 u 8 GB que una notebook modesta: ese valor por sí solo no alcanza para descartar un celular
+con el umbral de 4 GB del Modo_Degradado (criterio 1.8). Sin un segundo gate, un celular pasaba la
+verificación de compatibilidad y el Motor_Inferencia intentaba cargar el modelo completo en el
+proceso del navegador — en Chrome Android esto agota la memoria del proceso *renderer* y el sistema
+operativo lo mata sin lanzar una excepción de JavaScript, por lo que el `try/catch` que activa
+Modo_Degradado nunca llega a ejecutarse: la pestaña simplemente se cierra. `nivelModelo` resolvía
+esto seleccionando el modelo compacto en dispositivos móviles o que reportan menos del tope máximo
+de memoria, sin depender de una señal de memoria que en el navegador es demasiado imprecisa como
+único criterio.
+
+Ambos niveles cargan hoy `Llama-3.2-1B` (ver tabla abajo): se bajó también el nivel `completo` para
+aliviar memoria en escritorio, no solo en móvil. El gate de 8 GB (`MIN_MEMORY_GB_FULL_MODEL`) se
+mantiene sin cambios porque `nivelModelo` sigue teniendo efecto real — ya no decide el tamaño del
+modelo, pero sigue decidiendo `context_window_size` (ver más abajo: 2048 en `compacto`, 4096 en
+`completo`), y separar los niveles en el futuro para volver a cargar tamaños distintos es un cambio
+de dos constantes, no un refactor.
 
 **`soporteShaderF16` y la matriz de variantes de modelo.** Todo el catálogo pre-construido de
 WebLLM que usa el Sistema (`q4f16_1`) declara `required_features: ["shader-f16"]`: es la única
@@ -228,13 +236,18 @@ cuantización (`soporteShaderF16`) — resuelta en `configuration.ts` (`modelIdF
 
 | `nivelModelo` | `soporteShaderF16` | Modelo cargado | VRAM aprox. |
 |---|---|---|---|
-| `completo` | `true` | `Llama-3.2-3B-Instruct-q4f16_1-MLC` | 2.26 GB |
-| `completo` | `false` | `Llama-3.2-3B-Instruct-q4f32_1-MLC` | 2.95 GB |
+| `completo` | `true` | `Llama-3.2-1B-Instruct-q4f16_1-MLC` | 0.88 GB |
+| `completo` | `false` | `Llama-3.2-1B-Instruct-q4f32_1-MLC` | 1.13 GB |
 | `compacto` | `true` | `Llama-3.2-1B-Instruct-q4f16_1-MLC` | 0.88 GB |
 | `compacto` | `false` | `Llama-3.2-1B-Instruct-q4f32_1-MLC` | 1.13 GB |
 
-Las 4 variantes son de la misma familia y comparten chat template, así que `SYSTEM_PROMPT` y el
-resto del comportamiento del Sistema no cambian según cuál se cargue.
+Las 4 celdas son de la misma familia y comparten chat template, así que `SYSTEM_PROMPT` y el resto
+del comportamiento del Sistema no cambian según cuál se cargue. Con ambos niveles apuntando al mismo
+modelo, el eje `nivelModelo` de esta matriz ya no afecta el id cargado -- solo `soporteShaderF16`
+lo hace. `nivelModelo` se mantiene como eje independiente porque sigue decidiendo
+`context_window_size` (`contextWindowSizeForTier()`), y porque volver a separar los tamaños de
+modelo por nivel es un cambio de dos constantes en `configuration.ts`, no un refactor de esta
+matriz.
 
 Como red de seguridad (por si un modelo futuro requiriera otra `required_feature` no sondeada
 proactivamente), `Motor_Inferencia.classifyInitializationError` también clasifica
@@ -510,7 +523,7 @@ interface ArchivoExportado {
 
 // Metadatos de la versión del modelo cacheado (persistidos junto al Cache_Modelo, p.ej. en IndexedDB o en un registro dentro del propio cache)
 interface MetadatosModeloCacheado {
-  modeloId: string;        // p.ej. "Llama-3.2-3B-Instruct-q4f16_1"
+  modeloId: string;        // p.ej. "Llama-3.2-1B-Instruct-q4f16_1"
   version: string;
   checksums: Record<string, string>; // ruta de archivo -> checksum sha256 de referencia
   integridadVerificada: boolean;
