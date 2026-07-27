@@ -12,6 +12,27 @@ import type { ChatOptions, CreateMLCEngine as CreateMLCEngineType } from "@mlc-a
 import type { Message, MessageRole } from "../types/models";
 import { SYSTEM_PROMPT } from "./systemPrompt";
 
+/**
+ * Best-effort mitigation for "degenerate repetition" -- the model regenerates
+ * an entire block of text (e.g. a whole markdown list) verbatim a second
+ * time within the same response. Observed with `Llama-3.2-1B` generating
+ * long lists (not observed with the previous 3B model): small instruct
+ * models are more prone to looping back to an already-visited high-probability
+ * state without a repetition penalty. Not a measured tuning value -- 1.15 is
+ * the typical value recommended for MLC/llama.cpp-style engines to break
+ * loops without noticeably hurting fluency.
+ */
+const REPETITION_PENALTY = 1.15;
+
+/**
+ * Safety net: if `REPETITION_PENALTY` doesn't fully prevent a loop, this
+ * bounds the worst-case damage instead of generating until the
+ * `context_window_size` is exhausted -- most relevant on the "compact" tier,
+ * whose context window (`CONTEXT_WINDOW_SIZE_COMPACT`, `configuration.ts`)
+ * is only 2048 tokens.
+ */
+const MAX_TOKENS = 1024;
+
 /** Message in the role/content format expected by WebLLM's chat API (OpenAI-compatible). */
 export type OpenAiMessage =
   | { role: "system"; content: string }
@@ -35,6 +56,8 @@ export interface MlcEngine {
       create(request: {
         messages: OpenAiMessage[];
         stream: true;
+        repetition_penalty?: number;
+        max_tokens?: number;
       }): Promise<AsyncIterable<MlcResponseChunk>>;
     };
   };
@@ -279,6 +302,8 @@ export class InferenceEngineWebLLM implements InferenceEngine {
       const chunks = await mlcEngine.chat.completions.create({
         messages: mapHistoryToOpenAi(history),
         stream: true,
+        repetition_penalty: REPETITION_PENALTY,
+        max_tokens: MAX_TOKENS,
       });
       for await (const chunk of chunks) {
         const text = chunk.choices[0]?.delta.content;

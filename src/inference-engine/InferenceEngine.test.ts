@@ -153,6 +153,8 @@ describe("InferenceEngineWebLLM.generate", () => {
         { role: "user", content: "hola" },
       ],
       stream: true,
+      repetition_penalty: 1.15,
+      max_tokens: 1024,
     });
   });
 
