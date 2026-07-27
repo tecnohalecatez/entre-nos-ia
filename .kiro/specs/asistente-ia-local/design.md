@@ -320,6 +320,15 @@ interface MotorInferencia {
 }
 ```
 
+**Parámetros de sampling en `generar()`.** `InferenceEngine.ts` fija `repetition_penalty: 1.15` y
+`max_tokens: 1024` en cada llamada a `chat.completions.create()` — mitigación best-effort (no un
+ajuste medido) para "degenerate repetition": el modelo repite un bloque de texto completo (p. ej.
+una lista markdown entera) verbatim dentro de una misma respuesta, observado con `Llama-3.2-1B`
+generando listas largas sin penalización, no observado con el modelo de 3B que se usaba antes en el
+nivel `completo`. `repetition_penalty` es el lever recomendado para este patrón (MLC/llama.cpp);
+`max_tokens` es una red de seguridad independiente, para acotar el daño si algún otro patrón de
+loop apareciera, sobre todo relevante en el nivel `compacto` con `ventanaContexto = 2048`.
+
 `reducirGeneracion` modela exactamente los tres eventos terminales de 4.3 (completar), 4.5 (cancelar) y 8.2 (error), garantizando en todos los casos:
 - El `mensajeUsuario` original permanece presente y sin modificar.
 - En `error`, no queda texto parcial visible como mensaje del asistente (se descarta `textoParcial`).
