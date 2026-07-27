@@ -63,13 +63,32 @@ import { causeFromIncompatibility, degradedModeMessage } from "./degradedMode";
 import { modelIdForTier, contextWindowSizeForTier } from "./configuration";
 import { parseModelLoadProgress } from "./modelLoadProgress";
 import type { ModelLoadProgress } from "./modelLoadProgress";
-import { takePreviousSessionSignal } from "./sessionDiagnostics";
+import {
+  takePreviousSessionSignal,
+  markLoadingStarted,
+  markLoadingFinished,
+  recordLoadCrash,
+  resetLoadCrashCount,
+} from "./sessionDiagnostics";
 
 /** Truncation length for `DegradedModeCause`'s `detail` field (App.tsx's "Detalles técnicos"). */
 const ERROR_DETAIL_MAX_LENGTH = 300;
 
 const PREVIOUS_SESSION_CRASHED_TEXT =
   "La app se reinició justo mientras generaba una respuesta. Es posible que el dispositivo se haya quedado sin memoria.";
+
+const LOAD_INTERRUPTED_RETRY_TEXT =
+  "La carga anterior del modelo de IA se interrumpió inesperadamente, posiblemente por falta de memoria. Reintentando…";
+
+/**
+ * How many CONSECUTIVE crashes while loading the model (`"crashed_while_loading"`,
+ * `sessionDiagnostics.ts`) are tolerated before giving up on auto-retrying
+ * and surfacing `repeated_load_crash` instead (`degradedMode.ts`). `1` would
+ * mean never retrying even once after a possibly-transient crash; this
+ * gives it one silent retry (with a heads-up notification) before treating
+ * it as a real, repeatable device limitation.
+ */
+const LOAD_CRASH_THRESHOLD = 2;
 
 /**
  * Builds the raw `${name}: ${message}` description shown in the "Detalles
@@ -259,11 +278,27 @@ export function AppStateProvider({
       // this session's own markers can overwrite that signal (see
       // `sessionDiagnostics.ts`). Answers a question otherwise invisible on
       // a phone/tablet with no devtools: "did the browser process crash
-      // mid-generation, or did something reload the page deliberately
-      // (`registerServiceWorker.ts`)?" Best-effort only -- never blocks or
-      // fails the boot sequence.
-      if (takePreviousSessionSignal() === "crashed_while_generating") {
+      // mid-load/mid-generation, or did something reload the page
+      // deliberately (`registerServiceWorker.ts`)?" Best-effort only --
+      // never blocks or fails the boot sequence.
+      //
+      // `crashed_while_loading` additionally tracks a CONSECUTIVE-crash
+      // counter (`recordLoadCrash()`): a phone was observed "loading, then
+      // reloading" in a silent, invisible loop -- a hard process crash
+      // during `inferenceEngine.initialize()` never runs any of this app's
+      // `catch` blocks, so nothing was ever shown. One crash gets a quiet
+      // retry (with a heads-up notification, in case it was transient);
+      // `LOAD_CRASH_THRESHOLD` consecutive crashes stop the loop below
+      // instead of retrying forever.
+      const previousSessionSignal = takePreviousSessionSignal();
+      let consecutiveLoadCrashes = 0;
+      if (previousSessionSignal === "crashed_while_generating") {
         showNotification({ type: "error", text: PREVIOUS_SESSION_CRASHED_TEXT });
+      } else if (previousSessionSignal === "crashed_while_loading") {
+        consecutiveLoadCrashes = recordLoadCrash();
+        if (consecutiveLoadCrashes < LOAD_CRASH_THRESHOLD) {
+          showNotification({ type: "error", text: LOAD_INTERRUPTED_RETRY_TEXT });
+        }
       }
 
       // 1. Compatibility detection (1.1, 1.2, 1.7).
@@ -279,6 +314,17 @@ export function AppStateProvider({
       // or initialization.
       if (result.selectedEngine === "none") {
         activateDegradedMode(causeFromIncompatibility(result));
+        setLoading(false);
+        return;
+      }
+
+      // Give up auto-retrying after LOAD_CRASH_THRESHOLD consecutive
+      // crashes while loading (see step 0 above): surface a clear,
+      // actionable screen with a manual retry (App.tsx) instead of
+      // attempting `initialize()` again and risking yet another silent
+      // crash-and-reload.
+      if (consecutiveLoadCrashes >= LOAD_CRASH_THRESHOLD) {
+        activateDegradedMode({ type: "repeated_load_crash", attempts: consecutiveLoadCrashes });
         setLoading(false);
         return;
       }
@@ -329,57 +375,69 @@ export function AppStateProvider({
       // id depends on `result.modelTier` (Requirement 1: a full-size model
       // reliably OOM-crashes memory-constrained devices such as phones, see
       // `configuration.ts`).
+      //
+      // Wrapped with markLoadingStarted()/markLoadingFinished() (outer
+      // try/finally around the existing try/catch, same pattern as
+      // `useSendMessage.ts`'s runGeneration()) so a hard crash here --
+      // which skips the `catch` below entirely -- still leaves a marker
+      // `sessionDiagnostics.ts` can read on the NEXT boot (step 0 above).
+      markLoadingStarted();
       try {
-        await inferenceEngine.initialize(
-          result.selectedEngine,
-          modelIdForTier(result.modelTier, result.shaderF16Available),
-          contextWindowSizeForTier(result.modelTier),
-        );
-      } catch (error) {
-        if (isCancelled(controller.signal)) {
-          return;
-        }
-        // Logged locally only (never transmitted, see Requirement 6) so the
-        // real cause is diagnosable instead of only surfacing the generic
-        // degraded-mode message. `error.cause` is only the coarse
-        // classification (e.g. "other_cause"); the actually wrapped
-        // exception lives in `originalCause` and is logged separately so
-        // it's visible without manually expanding the error object.
-        console.error("[AppState] Inference engine initialization failed:", error);
-        if (error instanceof EngineInitializationError) {
-          console.error("[AppState] Underlying cause:", error.originalCause);
-        }
-        const classifiedCause: EngineInitializationFailureCause =
-          error instanceof EngineInitializationError ? error.cause : "other_cause";
-        // 3.5: if the browser is offline, report the specific
-        // connection-required message instead of the generic
-        // initialization-failure one -- but ONLY when the classification
-        // itself is consistent with a download/unknown failure
-        // (`network_error`/`other_cause`). A device-capability cause
-        // (insufficient memory, an unsupported GPU feature/limit, WebGPU
-        // gone unavailable) is real and worth surfacing on its own even if
-        // the device also happens to be offline right now; reporting
-        // "necesitás conexión" in that case would be actively misleading
-        // (see the bug this was found from: a device whose real problem was
-        // its GPU driver, not connectivity).
-        if (!isBrowserOnline() && (classifiedCause === "network_error" || classifiedCause === "other_cause")) {
-          activateDegradedMode({ type: "no_connection_initial_load" });
+        try {
+          await inferenceEngine.initialize(
+            result.selectedEngine,
+            modelIdForTier(result.modelTier, result.shaderF16Available),
+            contextWindowSizeForTier(result.modelTier),
+          );
+        } catch (error) {
+          if (isCancelled(controller.signal)) {
+            return;
+          }
+          // Logged locally only (never transmitted, see Requirement 6) so the
+          // real cause is diagnosable instead of only surfacing the generic
+          // degraded-mode message. `error.cause` is only the coarse
+          // classification (e.g. "other_cause"); the actually wrapped
+          // exception lives in `originalCause` and is logged separately so
+          // it's visible without manually expanding the error object.
+          console.error("[AppState] Inference engine initialization failed:", error);
+          if (error instanceof EngineInitializationError) {
+            console.error("[AppState] Underlying cause:", error.originalCause);
+          }
+          const classifiedCause: EngineInitializationFailureCause =
+            error instanceof EngineInitializationError ? error.cause : "other_cause";
+          // 3.5: if the browser is offline, report the specific
+          // connection-required message instead of the generic
+          // initialization-failure one -- but ONLY when the classification
+          // itself is consistent with a download/unknown failure
+          // (`network_error`/`other_cause`). A device-capability cause
+          // (insufficient memory, an unsupported GPU feature/limit, WebGPU
+          // gone unavailable) is real and worth surfacing on its own even if
+          // the device also happens to be offline right now; reporting
+          // "necesitás conexión" in that case would be actively misleading
+          // (see the bug this was found from: a device whose real problem was
+          // its GPU driver, not connectivity).
+          if (!isBrowserOnline() && (classifiedCause === "network_error" || classifiedCause === "other_cause")) {
+            activateDegradedMode({ type: "no_connection_initial_load" });
+            setLoading(false);
+            return;
+          }
+          const detail = describeErrorDetail(
+            error instanceof EngineInitializationError ? error.originalCause : error,
+          );
+          activateDegradedMode({ type: "engine_init_failure", cause: classifiedCause, detail });
           setLoading(false);
           return;
         }
-        const detail = describeErrorDetail(
-          error instanceof EngineInitializationError ? error.originalCause : error,
-        );
-        activateDegradedMode({ type: "engine_init_failure", cause: classifiedCause, detail });
-        setLoading(false);
-        return;
-      }
-      if (isCancelled(controller.signal)) {
-        return;
-      }
+        if (isCancelled(controller.signal)) {
+          return;
+        }
 
-      setEngineReady(true);
-      setLoading(false);
+        resetLoadCrashCount();
+        setEngineReady(true);
+        setLoading(false);
+      } finally {
+        markLoadingFinished();
+      }
 
       // 4. Initial conversation load (5.3), once the engine is ready
       // (doesn't block Degraded_Mode activation if it fails). Loaded inline

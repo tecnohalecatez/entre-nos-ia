@@ -18,11 +18,22 @@ import { AppStateProvider } from "./app-state/AppStateProvider";
 import { useAppState } from "./app-state/useAppState";
 import { degradedModeMessage } from "./app-state/degradedMode";
 import { APP_VERSION } from "./app-state/appVersion";
+import { resetLoadCrashCount } from "./app-state/sessionDiagnostics";
 import { UpdateAvailableNotification } from "./service-worker-app/UpdateAvailableNotification";
 import { ModelLoadProgressIndicator } from "./app-state/ModelLoadProgressIndicator";
 import { ChatInterface } from "./chat-interface/ChatInterface";
 import { ThemeProvider } from "./theme";
 import "./App.css";
+
+function handleRetryAfterRepeatedLoadCrash(): void {
+  // The boot sequence stopped auto-retrying specifically because
+  // `AppStateProvider.tsx`'s consecutive-crash counter reached
+  // `LOAD_CRASH_THRESHOLD` -- a manual retry should get a fresh count,
+  // otherwise a single subsequent crash (instead of two) would immediately
+  // land back on this same screen.
+  resetLoadCrashCount();
+  window.location.reload();
+}
 
 function AppContent() {
   const { degradedMode, loading } = useAppState();
@@ -52,6 +63,11 @@ function AppContent() {
                 </p>
                 <p>Versión {APP_VERSION}</p>
               </details>
+            ) : null}
+            {degradedMode.type === "repeated_load_crash" ? (
+              <button type="button" className="state-screen__retry-button" onClick={handleRetryAfterRepeatedLoadCrash}>
+                Reintentar
+              </button>
             ) : null}
           </div>
         </section>

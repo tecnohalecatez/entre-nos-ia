@@ -16,9 +16,20 @@ interface GPUAdapter {
   readonly features: { has(name: string): boolean };
 }
 
+/**
+ * Options accepted by `GPU.requestAdapter()`. Only `powerPreference` is
+ * modeled: it's the one field `InferenceEngine.ts`'s `shimGpuPowerPreference()`
+ * needs to read/strip (see there for why). `detect.ts`'s `probeWebgpu()`
+ * still calls `requestAdapter()` with no arguments at all, unaffected by
+ * this being optional.
+ */
+interface GPURequestAdapterOptions {
+  powerPreference?: string;
+}
+
 /** Minimal WebGPU API entry point exposed on `navigator.gpu`. */
 interface GPU {
-  requestAdapter(): Promise<GPUAdapter | null>;
+  requestAdapter(options?: GPURequestAdapterOptions): Promise<GPUAdapter | null>;
 }
 
 /** Minimal shape of `navigator.userAgentData` (Chromium-only). */

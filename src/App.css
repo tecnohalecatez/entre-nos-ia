@@ -83,6 +83,26 @@
   white-space: pre-wrap;
 }
 
+/*
+ * "Reintentar" button on the Degraded_Mode screen, shown only for
+ * `repeated_load_crash` -- the one cause where the boot sequence
+ * deliberately stops auto-retrying (App.tsx). Visual language matches
+ * `.notification__action-button` (Notification.css).
+ */
+.state-screen__retry-button {
+  font-size: 14px;
+  padding: 8px 20px;
+  border-radius: var(--radius-pill);
+  color: var(--accent);
+  background: var(--accent-bg);
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.state-screen__retry-button:hover {
+  border-color: var(--accent-border);
+}
+
 .state-screen__progress-bar {
   width: 100%;
   max-width: 220px;
