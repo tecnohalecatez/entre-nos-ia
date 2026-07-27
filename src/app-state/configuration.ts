@@ -15,50 +15,55 @@
 import type { ModelTier } from "../compatibility-detector/decide";
 
 /**
- * Full-size model, used on desktop-class devices (`modelTier === "full"`)
- * whose WebGPU adapter supports `shader-f16` (`shaderF16Available === true`,
- * the common case). `vram_required_MB: 2263.69` per WebLLM's catalog
- * (~2.26 GB).
+ * Model used on desktop-class devices (`modelTier === "full"`) whose WebGPU
+ * adapter supports `shader-f16` (`shaderF16Available === true`, the common
+ * case). `vram_required_MB: 879.04` per WebLLM's catalog (~0.88 GB).
+ *
+ * Was `Llama-3.2-3B-Instruct-q4f16_1-MLC` (~2.26 GB) until this was lowered
+ * to the same model as `MODEL_ID_COMPACT`, to reduce the app's memory
+ * footprint on desktop too (-61% VRAM). `MODEL_ID_FULL`/`MODEL_ID_COMPACT`
+ * are kept as separate constants on purpose, even though they currently
+ * hold the same value: `modelTier` still has a real effect
+ * (`contextWindowSizeForTier()` -- 2048 on `compact`, 4096 on `full`), and
+ * splitting the two model sizes back apart later is a two-line change
+ * instead of a refactor.
  */
-export const MODEL_ID_FULL = "Llama-3.2-3B-Instruct-q4f16_1-MLC";
+export const MODEL_ID_FULL = "Llama-3.2-1B-Instruct-q4f16_1-MLC";
 
 /**
  * `q4f32_1` fallback for `MODEL_ID_FULL`, used when `shaderF16Available` is
- * false: same size tier, but doesn't require the `shader-f16` WebGPU
- * extension (`required_features` is absent from this catalog entry).
- * Heavier than `MODEL_ID_FULL` (`vram_required_MB: 2951.51`, ~2.95 GB)
- * since f32 weights take more space than f16 -- an acceptable tradeoff on
- * desktop-class hardware in exchange for not needing an optional GPU
- * feature at all.
+ * false: doesn't require the `shader-f16` WebGPU extension (`required_features`
+ * is absent from this catalog entry). Heavier than `MODEL_ID_FULL`
+ * (`vram_required_MB: 1128.82`, ~1.13 GB) since f32 weights take more space
+ * than f16.
  */
-export const MODEL_ID_FULL_F32 = "Llama-3.2-3B-Instruct-q4f32_1-MLC";
+export const MODEL_ID_FULL_F32 = "Llama-3.2-1B-Instruct-q4f32_1-MLC";
 
 /**
- * Compact model, used on memory-constrained devices such as phones
- * (`modelTier === "compact"`) whose adapter supports `shader-f16`. Same
- * family and chat template as `MODEL_ID_FULL`, so `SYSTEM_PROMPT` and
- * Spanish-response behavior are unaffected by which one is loaded.
- * `vram_required_MB: 879.04` per WebLLM's catalog (~0.88 GB, ~2.6x less
- * than `MODEL_ID_FULL`).
+ * Model used on memory-constrained devices such as phones
+ * (`modelTier === "compact"`) whose adapter supports `shader-f16`. Same id
+ * as `MODEL_ID_FULL` (see its doc comment for why the constants stay
+ * separate). `vram_required_MB: 879.04` per WebLLM's catalog (~0.88 GB).
  *
- * Introduced to avoid the renderer OOM-crash a full-size model causes on
- * phones: `navigator.deviceMemory` reports device RAM quantized to powers
- * of 2 and capped at 8, so a typical phone reads the same 4-8 GB as a
- * modest laptop and would otherwise pass the Degraded_Mode memory gate
+ * Originally introduced to avoid the renderer OOM-crash a larger model
+ * caused on phones: `navigator.deviceMemory` reports device RAM quantized
+ * to powers of 2 and capped at 8, so a typical phone reads the same 4-8 GB
+ * as a modest laptop and would otherwise pass the Degraded_Mode memory gate
  * (`decide.ts`, `MIN_MEMORY_GB`) while still being unable to actually hold
- * 2.26 GB of model weights in the renderer process.
+ * a larger model's weights in the renderer process. Now that `MODEL_ID_FULL`
+ * is the same size, `modelTier`'s only remaining effect is the
+ * `context_window_size` override (`contextWindowSizeForTier()`).
  */
 export const MODEL_ID_COMPACT = "Llama-3.2-1B-Instruct-q4f16_1-MLC";
 
 /**
  * `q4f32_1` fallback for `MODEL_ID_COMPACT`, used when `shaderF16Available`
- * is false: `vram_required_MB: 1128.82` (~1.13 GB) per WebLLM's catalog --
- * still well under the full-size model's footprint, so it stays safe for
- * memory-constrained devices. This is the variant that fixes phones whose
- * GPU driver exposes WebGPU but not the `shader-f16` extension (common on
- * Android, e.g. some Adreno/Mali drivers): without it, WebLLM rejects
- * `MODEL_ID_COMPACT` with a `ShaderF16SupportError` before downloading any
- * weights (see `InferenceEngine.ts`, `classifyInitializationError`).
+ * is false: `vram_required_MB: 1128.82` (~1.13 GB) per WebLLM's catalog.
+ * This is the variant that fixes phones whose GPU driver exposes WebGPU but
+ * not the `shader-f16` extension (common on Android, e.g. some Adreno/Mali
+ * drivers): without it, WebLLM rejects `MODEL_ID_COMPACT` with a
+ * `ShaderF16SupportError` before downloading any weights (see
+ * `InferenceEngine.ts`, `classifyInitializationError`).
  */
 export const MODEL_ID_COMPACT_F32 = "Llama-3.2-1B-Instruct-q4f32_1-MLC";
 
@@ -78,8 +83,8 @@ export interface ModelDescriptor {
 
 const MODEL_DESCRIPTORS: Record<ModelTier, Record<"f16" | "f32", ModelDescriptor>> = {
   full: {
-    f16: { id: MODEL_ID_FULL, displayName: "Llama 3.2 3B", approximateSizeMb: 2263.69 },
-    f32: { id: MODEL_ID_FULL_F32, displayName: "Llama 3.2 3B", approximateSizeMb: 2951.51 },
+    f16: { id: MODEL_ID_FULL, displayName: "Llama 3.2 1B", approximateSizeMb: 879.04 },
+    f32: { id: MODEL_ID_FULL_F32, displayName: "Llama 3.2 1B", approximateSizeMb: 1128.82 },
   },
   compact: {
     f16: { id: MODEL_ID_COMPACT, displayName: "Llama 3.2 1B", approximateSizeMb: 879.04 },
@@ -122,10 +127,22 @@ export function modelIdForTier(tier: ModelTier, shaderF16Available: boolean): st
 export const CONTEXT_WINDOW_SIZE_COMPACT = 2048;
 
 /**
+ * Catalog default `context_window_size` for the `full` tier -- every
+ * Llama-3.2 entry in WebLLM's catalog declares this value. Not passed to
+ * `InferenceEngine` (`contextWindowSizeForTier()` returns `undefined` for
+ * `full`, so the model's own default applies unchanged); exposed only so
+ * the loading screen (`ModelLoadProgressIndicator`) can display the actual
+ * number instead of hardcoding it.
+ */
+export const CONTEXT_WINDOW_SIZE_DEFAULT = 4096;
+
+/**
  * Maps `modelTier` to the `context_window_size` override `InferenceEngine`
  * should apply, or `undefined` to keep the model's own default unchanged
  * (`modelTier === "full"`: desktop-class devices aren't the ones observed
- * crashing during generation).
+ * crashing during generation). This is now the ONLY behavioral difference
+ * between tiers, since `MODEL_ID_FULL`/`MODEL_ID_COMPACT` load the same
+ * model (see their doc comments above).
  */
 export function contextWindowSizeForTier(tier: ModelTier): number | undefined {
   return tier === "compact" ? CONTEXT_WINDOW_SIZE_COMPACT : undefined;

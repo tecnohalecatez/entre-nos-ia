@@ -257,7 +257,7 @@ Este plan traduce el diseño técnico (React + Vite + TypeScript, WebLLM, vite-p
 
 - [x] 25. Seleccionar el tamaño del modelo según la capacidad del dispositivo (evitar OOM en celulares)
   - [x] 25.1 Agregar `MODEL_ID_FULL`/`MODEL_ID_COMPACT` y `modelIdForTier()` en `configuration.ts`
-    - `MODEL_ID_COMPACT` (`Llama-3.2-1B-Instruct-q4f16_1-MLC`, ~0.88 GB VRAM) reemplaza a `MODEL_ID_FULL` (`Llama-3.2-3B-Instruct-q4f16_1-MLC`, ~2.26 GB VRAM) en dispositivos limitados
+    - `MODEL_ID_COMPACT` (`Llama-3.2-1B-Instruct-q4f16_1-MLC`, ~0.88 GB VRAM) reemplaza a `MODEL_ID_FULL` en dispositivos limitados (en la tarea 29, `MODEL_ID_FULL` termina apuntando al mismo modelo)
     - _Requirements: 1.10_
   - [x] 25.2 Extender `Detector_Compatibilidad` con `nivelModelo`
     - `detect()` agrega el sondeo `isMobileDevice` (User-Agent Client Hints con fallback a User-Agent string); `decide()` agrega la regla pura de `modelTier` ("compacto" si es móvil o `memoryGB < 8`), independiente de la precedencia existente de `selectedEngine`/`missingCapabilities`
@@ -308,6 +308,23 @@ Este plan traduce el diseño técnico (React + Vite + TypeScript, WebLLM, vite-p
   - [x] 28.2 Cablear el callback en `AppStateProvider` (`createInferenceEngine` ahora recibe
     `onProgress`) y renderizarlo en `ModelLoadProgressIndicator` (barra determinada por fase +
     detalle de transferencia + variante de modelo cargada, vía `modelDescriptorForTier()`)
+    - _Requirements: 2.2_
+
+- [x] 29. Un solo modelo (Llama-3.2-1B) para escritorio y móvil, para aliviar memoria en ambos
+  - `MODEL_ID_FULL`/`MODEL_ID_FULL_F32` pasan de `Llama-3.2-3B-Instruct` a apuntar al mismo modelo
+    que `MODEL_ID_COMPACT`/`MODEL_ID_COMPACT_F32` (`Llama-3.2-1B-Instruct`), -61% VRAM en escritorio
+    (de ~2.26 GB a ~0.88 GB). `nivelModelo` deja de decidir el tamaño del modelo, pero se mantiene
+    como eje independiente porque sigue decidiendo `context_window_size`
+    (`contextWindowSizeForTier()`: 2048 en `compacto`, 4096 en `completo`)
+    - _Requirements: 1.10_
+  - [x] 29.1 Actualizar `REQUIRED_MODEL_VERSION` en `sw.ts` para purgar los pesos del 3B en
+    instalaciones existentes
+    - Sin este cambio, quien ya tiene la app instalada conserva los ~2.26 GB del 3B en
+      Cache_Modelo indefinidamente y no recibe el alivio de memoria
+    - _Requirements: 1.10_
+  - [x] 29.2 Actualizar `ModelLoadProgressIndicator`: la etiqueta de tier ("versión completa" /
+    "versión compacta") pasa a mostrar la ventana de contexto, el único dato que ahora distingue
+    los dos niveles
     - _Requirements: 2.2_
 
 ## Notes

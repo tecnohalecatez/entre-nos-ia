@@ -23,9 +23,11 @@ contra SDKs de analytics/telemetría conocidos).
 No es un 1-de-4: son dos decisiones ortogonales, ambas en `src/app-state/configuration.ts` /
 `src/compatibility-detector/decide.ts`.
 
-- **Tamaño** (`modelTier`): `"compact"` (Llama-3.2-1B) si `isMobileDevice` o `memoryGB < 8`;
-  si no, `"full"` (Llama-3.2-3B). `navigator.deviceMemory` está cuantizado a potencias de 2 y
-  capado en 8, así que 8 es el único valor que confiablemente indica "tope de rango".
+- **Tamaño** (`modelTier`): `"compact"` si `isMobileDevice` o `memoryGB < 8`; si no, `"full"`.
+  Ambos cargan hoy Llama-3.2-1B (mismo id) -- `modelTier` ya no decide tamaño, solo
+  `context_window_size` (2048 en `compact`, 4096 en `full`, vía `contextWindowSizeForTier()`).
+  `navigator.deviceMemory` está cuantizado a potencias de 2 y capado en 8, así que 8 es el único
+  valor que confiablemente indica "tope de rango".
 - **Cuantización** (`shaderF16Available`): `q4f16_1` si el adapter WebGPU soporta la extensión
   `shader-f16`; si no, fallback a `q4f32_1`. Sin este fallback, WebLLM lanza `ShaderF16SupportError`
   antes de descargar pesos (común en drivers Adreno/Mali de Android).

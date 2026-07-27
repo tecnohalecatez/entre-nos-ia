@@ -10,8 +10,8 @@ conversaciones no salen de tu dispositivo, y no dependen de que un tercero les p
 inferencia.
 
 **[👉 Probalo ahora](https://main.d2rq97p9u6kq38.amplifyapp.com)** — Chrome/Edge recientes con
-WebGPU recomendado. La primera carga descarga el modelo (entre ~0.9 GB y ~3 GB según tu
-dispositivo) y puede tardar unos minutos; después queda en cache y funciona offline.
+WebGPU recomendado. La primera carga descarga el modelo (~0.9-1.1 GB) y puede tardar unos minutos;
+después queda en cache y funciona offline.
 
 ![Entre Nos IA](src/assets/hero.png)
 
@@ -160,9 +160,9 @@ completo de la comparación en
 
 **Selección de modelo en dos ejes independientes** (no un 1-de-4), en
 `src/app-state/configuration.ts` / `src/compatibility-detector/decide.ts`:
-- **Tamaño**: `compact` (Llama-3.2-1B, ~0.88 GB) en móviles o dispositivos con `memoryGB < 8`;
-  `full` (Llama-3.2-3B, ~2.26 GB) en el resto. `navigator.deviceMemory` está cuantizado y capado en
-  8, así que 8 es el único valor que indica confiablemente "tope de rango".
+- **Tamaño**: `compact` y `full` cargan el mismo modelo (Llama-3.2-1B, ~0.88 GB) — `modelTier` ya
+  no decide tamaño, solo la ventana de contexto (ver abajo). `navigator.deviceMemory` está
+  cuantizado y capado en 8, así que 8 es el único valor que indica confiablemente "tope de rango".
 - **Cuantización**: `q4f16_1` si el adapter WebGPU soporta la extensión `shader-f16`; si no,
   fallback a `q4f32_1`. Sin este fallback, WebLLM revienta con `ShaderF16SupportError` antes de
   descargar pesos (común en drivers Adreno/Mali de Android).
