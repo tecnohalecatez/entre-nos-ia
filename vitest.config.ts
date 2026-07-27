@@ -23,5 +23,16 @@ export default defineConfig({
     // Excludes macOS metadata artifacts (AppleDouble, "._" prefix) that
     // show up on exFAT/network volumes and aren't real test files.
     exclude: ['**/node_modules/**', '**/._*'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html', 'lcov'],
+      exclude: [
+        'node_modules/**',
+        '**/*.test.{ts,tsx}',
+        '**/*.property.test.{ts,tsx}',
+        'src/testing/**',
+        'src/main.tsx',
+      ],
+    },
   },
 })

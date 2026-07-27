@@ -348,6 +348,19 @@ interface GestorDescargaModelo {
 }
 ```
 
+**Estado en runtime (nota de diseño):** este componente está completamente implementado y
+cubierto por PBT (`src/model-download-manager/`), pero `AppStateProvider` **no lo invoca** durante
+el arranque real. `MLCEngine` (WebLLM) resuelve y descarga los shards de pesos internamente a
+partir del `model_id`, sin exponer un único archivo con una URL propia contra la cual aplicar
+`asegurarModeloDisponible`/`verificarIntegridad` — no hay, hoy, un pipeline propio de un solo
+archivo al que este componente pueda apuntar. El Requisito 2.4 (verificación de integridad) queda
+satisfecho en producción por WebLLM mismo, no por este módulo.
+
+`GestorDescargaModelo` se mantiene como componente probado y listo para el día en que el Sistema
+sirva pesos propios (p. ej. desde un bucket S3 propio en vez del catálogo de MLC-AI en Hugging
+Face): en ese escenario sí habría una URL de un solo archivo por shard contra la cual verificar
+checksum antes de servir desde `Cache_Modelo`, y este componente se conectaría sin cambios.
+
 ### Service_Worker_App
 
 Basado en Workbox (vía `vite-plugin-pwa`), con dos estrategias de cacheo separadas:
@@ -370,6 +383,15 @@ function decidirFuenteRespuesta(input: {
 Reglas (derivadas de 3.4, 3.5, 3.6):
 - Si `!online`: responde desde el cache correspondiente si está presente (`"cache"`); si no está presente, `"sin-respuesta"` (dispara el flujo de bloqueo de 3.5).
 - Si `online`: para assets, *stale-while-revalidate* (`"red-luego-cache"`); para recursos de modelo ya verificados en `Cache_Modelo`, `"cache"` (evita re-descarga, 2.5).
+
+**Estado en runtime (nota de diseño):** la ruta manual de `Cache_Modelo` en `sw.ts`
+(`MODEL_RESOURCE_PREFIX = "/models/"`, mismo origen) nunca se dispara hoy: WebLLM descarga los
+shards de pesos cross-origin, directamente desde el CDN de Hugging Face gestionado por MLC-AI, no
+desde una ruta propia del Sistema. Se mantiene por el mismo motivo que `GestorDescargaModelo`
+(arriba): es la ruta que activaría un futuro despliegue con pesos propios servidos desde el mismo
+origen (p. ej. S3 detrás de la misma distribución). El `globIgnores: ['**/modelos/**']` de
+`vite.config.ts` filtra un mecanismo distinto (qué queda fuera del precache generado en build) y
+no necesita coincidir en string con este prefijo de ruta en runtime.
 
 El ciclo de vida de actualización (Requisito 9) usa el patrón estándar de Workbox: `skipWaiting()` diferido hasta mensaje explícito del cliente (`postMessage({type: "SKIP_WAITING"})`), disparado solo cuando el usuario acepta la notificación de actualización y cuando `EstadoGeneracion.tipo !== "generando"`.
 

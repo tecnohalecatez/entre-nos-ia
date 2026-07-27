@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "name": "Run component tests on save",
+  "description": "Al guardar un archivo fuente bajo src/, corre los tests co-ubicados de ese componente (convención de .kiro/specs/asistente-ia-local, ver src/testing-conventions.md) y reporta fallas antes de que se acumulen.",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": ["src/**/*.ts", "src/**/*.tsx"]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Se guardó {{filePath}}. Si no es un archivo *.test.ts(x)/*.property.test.ts(x), identificá su(s) test(s) co-ubicado(s) en el mismo directorio (convención documentada en src/testing-conventions.md) y corré 'npm run test -- <ruta del test>' solo para esos archivos. Si el archivo guardado ya es un test, corrélo directamente. Reportá en una o dos líneas si pasó o qué falló, sin correr la suite completa."
+  }
+}
