@@ -17,6 +17,7 @@ import { NotificationProvider } from "./notification";
 import { AppStateProvider } from "./app-state/AppStateProvider";
 import { useAppState } from "./app-state/useAppState";
 import { degradedModeMessage } from "./app-state/degradedMode";
+import { APP_VERSION } from "./app-state/appVersion";
 import { UpdateAvailableNotification } from "./service-worker-app/UpdateAvailableNotification";
 import { ModelLoadProgressIndicator } from "./app-state/ModelLoadProgressIndicator";
 import { ChatInterface } from "./chat-interface/ChatInterface";
@@ -25,6 +26,12 @@ import "./App.css";
 
 function AppContent() {
   const { degradedMode, loading } = useAppState();
+
+  // Only `engine_init_failure` carries a `detail` (the raw underlying error,
+  // see `AppStateProvider.tsx`'s `describeErrorDetail()`): the other causes
+  // (incompatibility, download failure, offline) already say exactly what
+  // happened without needing a technical dump.
+  const detail = degradedMode?.type === "engine_init_failure" ? degradedMode.detail : undefined;
 
   return (
     <>
@@ -37,6 +44,15 @@ function AppContent() {
             </span>
             <h1>Asistente no disponible</h1>
             <p className="state-screen__text">{degradedModeMessage(degradedMode)}</p>
+            {detail !== undefined ? (
+              <details className="state-screen__details">
+                <summary>Detalles técnicos</summary>
+                <p>
+                  <code>{detail}</code>
+                </p>
+                <p>Versión {APP_VERSION}</p>
+              </details>
+            ) : null}
           </div>
         </section>
       ) : loading ? (

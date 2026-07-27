@@ -149,6 +149,53 @@ describe("registerServiceWorker — successful registration and fallback to dire
   });
 });
 
+describe("registerServiceWorker — gates the update reload on this tab's own consent (fixes an unconditional, unconsented reload)", () => {
+  beforeEach(() => {
+    Object.defineProperty(navigator, "serviceWorker", {
+      value: {},
+      configurable: true,
+    });
+  });
+
+  afterEach(() => {
+    registerSWMock.mockReset();
+  });
+
+  it("does NOT reload when onNeedReload fires without this tab having accepted an update (another tab/worker took control)", async () => {
+    let capturedOptions: RegisterSWOptions | undefined;
+    registerSWMock.mockImplementation((options?: RegisterSWOptions) => {
+      capturedOptions = options;
+      return vi.fn().mockResolvedValue(undefined);
+    });
+    const reload = vi.fn();
+
+    const { registerServiceWorker } = await import("./registerServiceWorker");
+    registerServiceWorker({}, reload);
+
+    capturedOptions?.onNeedReload?.();
+
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it("reloads when onNeedReload fires AFTER this tab's own sendSkipWaiting() was invoked (the user accepted the update here)", async () => {
+    let capturedOptions: RegisterSWOptions | undefined;
+    const updateServiceWorker = vi.fn().mockResolvedValue(undefined);
+    registerSWMock.mockImplementation((options?: RegisterSWOptions) => {
+      capturedOptions = options;
+      return updateServiceWorker;
+    });
+    const reload = vi.fn();
+
+    const { registerServiceWorker } = await import("./registerServiceWorker");
+    const sendSkipWaiting = assumeDefined(registerServiceWorker({}, reload));
+    sendSkipWaiting();
+
+    capturedOptions?.onNeedReload?.();
+
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("decideResponseSource — offline access-blocking contract with no prior cache (3.5)", () => {
   it("returns 'no-response' when offline with no cached resource at all, a signal a future bootstrap layer must use to block access to the Interfaz_Chat", () => {
     // Note: the exhaustiveness of this rule is already covered at the pure

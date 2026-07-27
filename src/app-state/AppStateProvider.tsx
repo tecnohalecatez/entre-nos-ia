@@ -47,6 +47,7 @@ import type {
   MlcEngineFactory,
   InferenceEngine,
   InitializationProgressReport,
+  EngineInitializationFailureCause,
 } from "../inference-engine/InferenceEngine";
 import { reduceGeneration } from "../inference-engine/reduceGeneration";
 import type { GenerationState } from "../inference-engine/reduceGeneration";
@@ -62,6 +63,29 @@ import { causeFromIncompatibility, degradedModeMessage } from "./degradedMode";
 import { modelIdForTier, contextWindowSizeForTier } from "./configuration";
 import { parseModelLoadProgress } from "./modelLoadProgress";
 import type { ModelLoadProgress } from "./modelLoadProgress";
+import { takePreviousSessionSignal } from "./sessionDiagnostics";
+
+/** Truncation length for `DegradedModeCause`'s `detail` field (App.tsx's "Detalles técnicos"). */
+const ERROR_DETAIL_MAX_LENGTH = 300;
+
+const PREVIOUS_SESSION_CRASHED_TEXT =
+  "La app se reinició justo mientras generaba una respuesta. Es posible que el dispositivo se haya quedado sin memoria.";
+
+/**
+ * Builds the raw `${name}: ${message}` description shown in the "Detalles
+ * técnicos" section of the Degraded_Mode screen (`App.tsx`), so a device
+ * without accessible devtools (a phone, a tablet) can report the real
+ * underlying error instead of only the generic Spanish message. This is the
+ * exact same information already sent to `console.error` just above each
+ * call site -- never transmitted anywhere (Requisito 6), just also
+ * rendered, locally, on the device that hit it.
+ */
+function describeErrorDetail(error: unknown): string {
+  const description = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+  return description.length > ERROR_DETAIL_MAX_LENGTH
+    ? `${description.slice(0, ERROR_DETAIL_MAX_LENGTH)}…`
+    : description;
+}
 
 export interface AppStateProviderProps {
   children: ReactNode;
@@ -231,6 +255,17 @@ export function AppStateProvider({
     const controller = new AbortController();
 
     async function runBootSequence(): Promise<void> {
+      // 0. Diagnose how the PREVIOUS page session (if any) ended, before
+      // this session's own markers can overwrite that signal (see
+      // `sessionDiagnostics.ts`). Answers a question otherwise invisible on
+      // a phone/tablet with no devtools: "did the browser process crash
+      // mid-generation, or did something reload the page deliberately
+      // (`registerServiceWorker.ts`)?" Best-effort only -- never blocks or
+      // fails the boot sequence.
+      if (takePreviousSessionSignal() === "crashed_while_generating") {
+        showNotification({ type: "error", text: PREVIOUS_SESSION_CRASHED_TEXT });
+      }
+
       // 1. Compatibility detection (1.1, 1.2, 1.7).
       const probes = await detectFn();
       if (isCancelled(controller.signal)) {
@@ -314,20 +349,28 @@ export function AppStateProvider({
         if (error instanceof EngineInitializationError) {
           console.error("[AppState] Underlying cause:", error.originalCause);
         }
-        // 3.5: if the browser is offline and WebLLM couldn't
-        // download/cache the weights, report the specific
+        const classifiedCause: EngineInitializationFailureCause =
+          error instanceof EngineInitializationError ? error.cause : "other_cause";
+        // 3.5: if the browser is offline, report the specific
         // connection-required message instead of the generic
-        // initialization-failure one.
-        if (!isBrowserOnline()) {
+        // initialization-failure one -- but ONLY when the classification
+        // itself is consistent with a download/unknown failure
+        // (`network_error`/`other_cause`). A device-capability cause
+        // (insufficient memory, an unsupported GPU feature/limit, WebGPU
+        // gone unavailable) is real and worth surfacing on its own even if
+        // the device also happens to be offline right now; reporting
+        // "necesitás conexión" in that case would be actively misleading
+        // (see the bug this was found from: a device whose real problem was
+        // its GPU driver, not connectivity).
+        if (!isBrowserOnline() && (classifiedCause === "network_error" || classifiedCause === "other_cause")) {
           activateDegradedMode({ type: "no_connection_initial_load" });
           setLoading(false);
           return;
         }
-        if (error instanceof EngineInitializationError) {
-          activateDegradedMode({ type: "engine_init_failure", cause: error.cause });
-        } else {
-          activateDegradedMode({ type: "engine_init_failure", cause: "other_cause" });
-        }
+        const detail = describeErrorDetail(
+          error instanceof EngineInitializationError ? error.originalCause : error,
+        );
+        activateDegradedMode({ type: "engine_init_failure", cause: classifiedCause, detail });
         setLoading(false);
         return;
       }

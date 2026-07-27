@@ -320,14 +320,28 @@ interface MotorInferencia {
 }
 ```
 
-**Parámetros de sampling en `generar()`.** `InferenceEngine.ts` fija `repetition_penalty: 1.15` y
-`max_tokens: 1024` en cada llamada a `chat.completions.create()` — mitigación best-effort (no un
-ajuste medido) para "degenerate repetition": el modelo repite un bloque de texto completo (p. ej.
-una lista markdown entera) verbatim dentro de una misma respuesta, observado con `Llama-3.2-1B`
-generando listas largas sin penalización, no observado con el modelo de 3B que se usaba antes en el
-nivel `completo`. `repetition_penalty` es el lever recomendado para este patrón (MLC/llama.cpp);
-`max_tokens` es una red de seguridad independiente, para acotar el daño si algún otro patrón de
-loop apareciera, sobre todo relevante en el nivel `compacto` con `ventanaContexto = 2048`.
+**Parámetros de sampling en `generar()`.** `InferenceEngine.ts` fija `repetition_penalty: 1.15` en
+cada llamada a `chat.completions.create()` — mitigación best-effort (no un ajuste medido) para
+"degenerate repetition": el modelo repite un bloque de texto completo (p. ej. una lista markdown
+entera) verbatim dentro de una misma respuesta, observado con `Llama-3.2-1B` generando listas largas
+sin penalización, no observado con el modelo de 3B que se usaba antes en el nivel `completo`.
+`repetition_penalty` es el lever recomendado para este patrón (MLC/llama.cpp).
+
+`max_tokens` ya no es un valor fijo (1024): se deriva de `ventanaContexto` vía
+`maxTokensForContextWindow()` (`min(1024, ventanaContexto / 4)`) — 512 en el nivel `compacto`
+(`ventanaContexto = 2048`), 1024 en `completo`. Un `max_tokens` fijo de 1024 en una ventana de 2048
+se llevaba la mitad de la ventana entera antes de contar un solo token de historial o del
+`SYSTEM_PROMPT`.
+
+**Truncado del historial (`truncateHistory.ts`).** Antes, `generar()` mandaba el historial completo
+de la Conversación en cada request, sin límite: una conversación larga hace crecer el KV-cache sin
+límite hasta exceder `ventanaContexto`, un vector de OOM real en dispositivos con poca memoria (ver
+"Motivación y umbral de 8 GB" más abajo). `truncateHistory(historial, presupuestoChars)` es una
+función PURA que conserva los mensajes más recientes que entren en un presupuesto de caracteres —
+estimado (no medido: no hay tokenizer disponible en esta capa) a partir de `ventanaContexto`,
+`max_tokens` y el largo de `SYSTEM_PROMPT`, a razón de ~3 caracteres por token — descartando los más
+antiguos primero. Siempre conserva al menos el último mensaje, aunque él solo exceda el presupuesto
+(`validateMessage.ts` ya limita un mensaje individual a 4000 caracteres).
 
 `reducirGeneracion` modela exactamente los tres eventos terminales de 4.3 (completar), 4.5 (cancelar) y 8.2 (error), garantizando en todos los casos:
 - El `mensajeUsuario` original permanece presente y sin modificar.
@@ -449,6 +463,19 @@ origen (p. ej. S3 detrás de la misma distribución). El `globIgnores: ['**/mode
 no necesita coincidir en string con este prefijo de ruta en runtime.
 
 El ciclo de vida de actualización (Requisito 9) usa el patrón estándar de Workbox: `skipWaiting()` diferido hasta mensaje explícito del cliente (`postMessage({type: "SKIP_WAITING"})`), disparado solo cuando el usuario acepta la notificación de actualización y cuando `EstadoGeneracion.tipo !== "generando"`.
+
+**Recarga de página gateada (`registerServiceWorker.ts`).** `vite-plugin-pwa`/`workbox-window`
+recarga la página **por sí solo** cuando el `Service Worker` toma control (evento `controlling`),
+salvo que se le provea un callback `onNeedReload`. Ese listener se arma con el evento `waiting` —no
+con la aceptación del usuario— y su flag `isUpdate` sólo significa "esta pestaña ya estaba
+controlada por un SW", verdadero en casi cualquier visita. Consecuencia real, no hipotética: con una
+versión nueva simplemente esperando, **cualquier** `controllerchange` (otra pestaña acepta la
+actualización, el navegador recicla un worker viejo) recargaba esta pestaña también, sin que su
+usuario tocara nada — potencialmente a mitad de una conversación o generación. Se provee
+`onNeedReload` y se gatea la recarga real a que **esta pestaña** haya invocado su propio
+`sendSkipWaiting()` (el usuario aceptó la actualización acá, o el controlador la aplicó diferida al
+terminar la generación en curso — ver arriba). Cualquier otra activación deja la pestaña con el JS
+actual, sin recargar, hasta la próxima navegación natural.
 
 ```ts
 // Función PURA sometida a PBT (Property 13)
@@ -641,12 +668,27 @@ La estrategia general es: **todo fallo se traduce en un mensaje visible y accion
 | Fallo de inicialización del motor por memoria (8.1) | Excepción de `MLCEngine.reload` clasificada como OOM | Mensaje específico de memoria insuficiente + Modo_Degradado |
 | Fallo de inicialización del motor por GPU sin `shader-f16` (1.11, 1.12, red de seguridad) | `ShaderF16SupportError`/`FeatureSupportError`, si el sondeo proactivo de `soporteShaderF16` no lo evitó | Mensaje específico ("GPU no soporta una función gráfica necesaria") + Modo_Degradado |
 | Inconsistencia de disponibilidad de WebGPU entre la sonda inicial y la inicialización real (1.14, mejora de visibilidad, causa raíz no confirmada) | `WebGPUNotAvailableError`/`WebGPUNotFoundError` de la propia `detectGPUDevice()` interna de WebLLM | Mensaje específico sugiriendo recargar + Modo_Degradado |
+| GPU/driver por debajo de los límites mínimos de WebGPU que pide WebLLM (real en GPUs Mali/Adreno de gama media/baja — `maxStorageBuffersPerShaderStage`, `maxBufferSize`, etc.) | `Error` plano de la propia `detectGPUDevice()` interna de WebLLM, clasificado por patrón de mensaje (`unsupported_gpu_limits`) | Mensaje específico ("no cumple los límites mínimos... limitación fija de este equipo") + Modo_Degradado |
 | Fallo de inicialización del motor por otra causa (8.5) | Cualquier otra excepción de inicialización | Mensaje genérico de fallo de inicialización + Modo_Degradado |
 | Fallo de escritura al exportar (7.2) | Excepción de la API de descarga de archivos | Informar error, no se genera archivo parcial (se escribe solo tras serializar completamente en memoria) |
 | Importación de archivo inválido (7.4) | `parsearImportacion` retorna `ok: false` | Mensaje de error específico (`json_invalido` \| `esquema_invalido`), Almacen_Conversaciones sin cambios |
 | Fallo de operación de persistencia (5.2) | Transacción Dexie rechazada | Mensaje de error en Interfaz_Chat, transacción revertida automáticamente (atomicidad) |
 
 Todos los mensajes de error se centralizan en un componente `Notificacion` de la Interfaz_Chat, evitando duplicar lógica de presentación de errores en cada componente.
+
+**Diagnóstico técnico visible en Modo_Degradado.** Hasta ahora la causa real de un
+`engine_init_failure` sólo se veía en `console.error` (`AppStateProvider.tsx`) — inútil en un
+teléfono o tablet sin devtools accesible. `DegradedModeCause` (`degradedMode.ts`) agrega un campo
+opcional `detail` con la descripción cruda (`${name}: ${message}`, recortada) del error subyacente
+(el mismo texto ya logueado, nunca información nueva ni transmitida — Requisito 6 intacto), mostrado
+en un bloque colapsado "Detalles técnicos" en la pantalla de Modo_Degradado (`App.tsx`).
+
+**Diagnóstico de recarga inesperada (`sessionDiagnostics.ts`).** Marcadores best-effort en
+`sessionStorage` que responden, en el arranque siguiente, una pregunta que tampoco era diagnosticable
+en el dispositivo: ¿el proceso del navegador se cayó a mitad de una generación (posible OOM), o hubo
+una recarga deliberada y conocida (la actualización del Service_Worker_App)? Si el marcador de
+"generando" sigue puesto al arrancar y no hay una razón de recarga registrada, se asume caída del
+proceso y se informa mediante una notificación.
 
 ## Testing Strategy
 

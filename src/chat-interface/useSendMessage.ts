@@ -59,6 +59,7 @@ import { reduceGeneration } from "../inference-engine/reduceGeneration";
 import type { GenerationState } from "../inference-engine/reduceGeneration";
 import type { InferenceEngine } from "../inference-engine/InferenceEngine";
 import type { Conversation, Message } from "../types/models";
+import { markGenerationStarted, markGenerationFinished } from "../app-state/sessionDiagnostics";
 
 const CREATE_CONVERSATION_ERROR_TEXT = "No se pudo crear la conversación. Intenta de nuevo.";
 const SAVE_USER_MESSAGE_ERROR_TEXT = "No se pudo guardar tu mensaje. Intenta de nuevo.";
@@ -149,44 +150,54 @@ export function useSendMessage(): UseSendMessageResult {
       localState = reduceGeneration(localState, { type: "start", userMessage });
       dispatchGeneration({ type: "start", userMessage });
 
+      // Marked around the whole generation attempt (`finally` below), not
+      // just the `for await`: see `sessionDiagnostics.ts` -- if the tab
+      // dies before this `finally` gets to run, the marker survives into
+      // the next boot as the signal that the previous session crashed
+      // mid-generation instead of ending through any path we control.
+      markGenerationStarted();
       try {
-        for await (const chunk of inferenceEngine.generate(history)) {
-          localState = reduceGeneration(localState, { type: "chunk", text: chunk });
-          dispatchGeneration({ type: "chunk", text: chunk });
+        try {
+          for await (const chunk of inferenceEngine.generate(history)) {
+            localState = reduceGeneration(localState, { type: "chunk", text: chunk });
+            dispatchGeneration({ type: "chunk", text: chunk });
+          }
+        } catch (error) {
+          dispatchGeneration({ type: "error", reason: errorDescription(error) });
+          showNotification({ type: "error", text: GENERATION_ERROR_TEXT });
+          return;
         }
-      } catch (error) {
-        dispatchGeneration({ type: "error", reason: errorDescription(error) });
-        showNotification({ type: "error", text: GENERATION_ERROR_TEXT });
-        return;
-      }
 
-      if (readCancelled(cancelledRef)) {
-        const finalState = reduceGeneration(localState, { type: "cancel" });
-        dispatchGeneration({ type: "cancel" });
-        if (finalState.type === "cancelled") {
-          const assistantMessage: Message = {
-            id: crypto.randomUUID(),
-            role: "assistant",
-            content: finalState.retainedPartialText,
-            timestamp: Date.now(),
-          };
+        if (readCancelled(cancelledRef)) {
+          const finalState = reduceGeneration(localState, { type: "cancel" });
+          dispatchGeneration({ type: "cancel" });
+          if (finalState.type === "cancelled") {
+            const assistantMessage: Message = {
+              id: crypto.randomUUID(),
+              role: "assistant",
+              content: finalState.retainedPartialText,
+              timestamp: Date.now(),
+            };
+            try {
+              await addMessage(conversationId, assistantMessage);
+            } catch {
+              showNotification({ type: "error", text: SAVE_ASSISTANT_MESSAGE_ERROR_TEXT });
+            }
+          }
+          return;
+        }
+
+        const finalState = reduceGeneration(localState, { type: "complete" });
+        dispatchGeneration({ type: "complete" });
+        if (finalState.type === "completed") {
           try {
-            await addMessage(conversationId, assistantMessage);
+            await addMessage(conversationId, finalState.assistantMessage);
           } catch {
             showNotification({ type: "error", text: SAVE_ASSISTANT_MESSAGE_ERROR_TEXT });
           }
         }
-        return;
-      }
-
-      const finalState = reduceGeneration(localState, { type: "complete" });
-      dispatchGeneration({ type: "complete" });
-      if (finalState.type === "completed") {
-        try {
-          await addMessage(conversationId, finalState.assistantMessage);
-        } catch {
-          showNotification({ type: "error", text: SAVE_ASSISTANT_MESSAGE_ERROR_TEXT });
-        }
+      } finally {
+        markGenerationFinished();
       }
     },
     [inferenceEngine, dispatchGeneration, addMessage, showNotification],
