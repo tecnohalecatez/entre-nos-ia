@@ -63,16 +63,48 @@ export const MODEL_ID_COMPACT = "Llama-3.2-1B-Instruct-q4f16_1-MLC";
 export const MODEL_ID_COMPACT_F32 = "Llama-3.2-1B-Instruct-q4f32_1-MLC";
 
 /**
+ * User-facing description of a model variant, shown in the loading screen
+ * (Requisito 2.2) so a real device makes it visible which of the four
+ * catalog entries was actually selected -- useful for the still-open
+ * Android/iOS diagnosis, which currently has no other way to observe this.
+ */
+export interface ModelDescriptor {
+  id: string;
+  /** Short human name, e.g. "Llama 3.2 1B" (no quantization suffix -- that's an implementation detail). */
+  displayName: string;
+  /** `vram_required_MB` from WebLLM's catalog for this exact `id`. */
+  approximateSizeMb: number;
+}
+
+const MODEL_DESCRIPTORS: Record<ModelTier, Record<"f16" | "f32", ModelDescriptor>> = {
+  full: {
+    f16: { id: MODEL_ID_FULL, displayName: "Llama 3.2 3B", approximateSizeMb: 2263.69 },
+    f32: { id: MODEL_ID_FULL_F32, displayName: "Llama 3.2 3B", approximateSizeMb: 2951.51 },
+  },
+  compact: {
+    f16: { id: MODEL_ID_COMPACT, displayName: "Llama 3.2 1B", approximateSizeMb: 879.04 },
+    f32: { id: MODEL_ID_COMPACT_F32, displayName: "Llama 3.2 1B", approximateSizeMb: 1128.82 },
+  },
+};
+
+/**
+ * Same 2x2 matrix as `modelIdForTier()`, returned as a full descriptor
+ * instead of just the id -- single source of truth for both (`modelIdForTier`
+ * delegates here) so the id and its displayed name/size can never drift
+ * apart.
+ */
+export function modelDescriptorForTier(tier: ModelTier, shaderF16Available: boolean): ModelDescriptor {
+  return MODEL_DESCRIPTORS[tier][shaderF16Available ? "f16" : "f32"];
+}
+
+/**
  * Maps the pure `modelTier`/`shaderF16Available` decided by `decide()` to
  * the concrete model id to load: `modelTier` picks the size (full/compact),
  * `shaderF16Available` picks the quantization variant (q4f16_1 preferred,
  * q4f32_1 fallback) -- two independent axes, not a single 1-of-4 choice.
  */
 export function modelIdForTier(tier: ModelTier, shaderF16Available: boolean): string {
-  if (tier === "compact") {
-    return shaderF16Available ? MODEL_ID_COMPACT : MODEL_ID_COMPACT_F32;
-  }
-  return shaderF16Available ? MODEL_ID_FULL : MODEL_ID_FULL_F32;
+  return modelDescriptorForTier(tier, shaderF16Available).id;
 }
 
 /**

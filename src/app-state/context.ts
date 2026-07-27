@@ -14,6 +14,7 @@ import type { InferenceEngine } from "../inference-engine/InferenceEngine";
 import type { ConversationManager } from "../conversation-manager/ConversationManager";
 import type { Conversation, Message } from "../types/models";
 import type { DegradedModeCause } from "./degradedMode";
+import type { ModelLoadProgress } from "./modelLoadProgress";
 
 export interface AppStateContextValue {
   /** Result of `decide()`, or `null` while the boot sequence hasn't produced it yet. */
@@ -24,6 +25,13 @@ export interface AppStateContextValue {
   degradedMode: DegradedModeCause | null;
   /** `true` once `InferenceEngine.initialize()` has resolved successfully. */
   engineReady: boolean;
+  /**
+   * Most recent model-loading progress reported by WebLLM during
+   * `InferenceEngine.initialize()` (Requisito 2.2), or `null` before the
+   * first report arrives (or once boot has moved past initialization).
+   * Rendered by `ModelLoadProgressIndicator` in the loading screen.
+   */
+  modelLoadProgress: ModelLoadProgress | null;
 
   generationState: GenerationState;
   dispatchGeneration: Dispatch<GenerationEvent>;

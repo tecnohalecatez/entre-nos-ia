@@ -297,6 +297,19 @@ Este plan traduce el diseño técnico (React + Vite + TypeScript, WebLLM, vite-p
       consistente con presión de memoria del KV-cache; iOS no expone señal de memoria desde JS
     - _Requirements: 1.13_
 
+- [x] 28. Mostrar progreso real de carga del modelo en la pantalla de arranque
+  - `AppStateProvider` construía el `MotorInferencia` sin cablear su callback de progreso, por lo
+    que la pantalla de carga mostraba únicamente una barra indeterminada, sin dato real -- en un
+    celular la primera descarga (~1 GB) tarda minutos y era indistinguible de un cuelgue
+  - [x] 28.1 `modelLoadProgress.ts`: traducir el `InitializationProgressReport` de WebLLM (4 fases,
+    cada una con su propio progreso 0→1 que se reinicia) a un modelo de dominio (`ModelLoadPhase`,
+    `parseModelLoadProgress`, `modelLoadPhaseLabel`) con fallback seguro ante texto no reconocido
+    - _Requirements: 2.2_
+  - [x] 28.2 Cablear el callback en `AppStateProvider` (`createInferenceEngine` ahora recibe
+    `onProgress`) y renderizarlo en `ModelLoadProgressIndicator` (barra determinada por fase +
+    detalle de transferencia + variante de modelo cargada, vía `modelDescriptorForTier()`)
+    - _Requirements: 2.2_
+
 ## Notes
 
 - Las tareas marcadas con `*` son opcionales (pruebas) y pueden omitirse para un MVP más rápido; el modelo NO debe implementarlas salvo indicación explícita.

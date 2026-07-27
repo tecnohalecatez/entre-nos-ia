@@ -18,6 +18,7 @@ import { AppStateProvider } from "./app-state/AppStateProvider";
 import { useAppState } from "./app-state/useAppState";
 import { degradedModeMessage } from "./app-state/degradedMode";
 import { UpdateAvailableNotification } from "./service-worker-app/UpdateAvailableNotification";
+import { ModelLoadProgressIndicator } from "./app-state/ModelLoadProgressIndicator";
 import { ChatInterface } from "./chat-interface/ChatInterface";
 import { ThemeProvider } from "./theme";
 import "./App.css";
@@ -49,7 +50,7 @@ function AppContent() {
               Estamos cargando el modelo de IA directamente en tu navegador. La primera vez puede tardar un poco;
               después queda listo al instante.
             </p>
-            <div className="state-screen__progress-bar" role="progressbar" aria-label="Preparando el asistente…" />
+            <ModelLoadProgressIndicator />
           </div>
         </section>
       ) : (

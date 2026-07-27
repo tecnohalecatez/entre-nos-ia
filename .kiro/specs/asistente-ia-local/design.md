@@ -312,6 +312,39 @@ interface MotorInferencia {
 - En `error`, no queda texto parcial visible como mensaje del asistente (se descarta `textoParcial`).
 - En `cancelado`, el texto parcial generado hasta el momento se conserva como contenido válido.
 
+### Progreso de carga del modelo (`modelLoadProgress.ts`)
+
+Cableado del Requisito 2.2 en el camino real de arranque (no en `Gestor_Descarga_Modelo`, que no se
+invoca ahí -- ver nota de diseño en `AppStateProvider.tsx`). `MotorInferencia.inicializar()` recibe
+un callback de progreso (`onInitializationProgress`, pasado como `initProgressCallback` a
+`CreateMLCEngine`) que WebLLM invoca repetidamente mientras carga el modelo.
+
+WebLLM reporta **4 fases independientes**, verificado leyendo su código fuente instalado
+(`fetchTensorCacheInternal` y `reload()` en `@mlc-ai/web-llm`). Cada fase tiene su propio
+`progress` de 0 a 1 que **se reinicia** al pasar a la siguiente -- no existe un "total" combinado
+que venga del SDK:
+
+| Fase | `text` reportado por WebLLM (fuente) | Fase de dominio (`ModelLoadPhase`) |
+|---|---|---|
+| 1 | `"Start to fetch params"` | `starting` |
+| 2 | `"Fetching param cache[6/23]: 512MB fetched. 62% completed, 14 secs elapsed. ..."` | `downloading` |
+| 3 | `"Loading model from cache[6/23]: 512MB loaded. 62% completed, 14 secs elapsed."` | `loading_weights` |
+| 4 | `"Loading GPU shader modules[80/120]: 66% completed, 3 secs elapsed."` | `compiling_shaders` |
+| 5 | `"Finish loading on WebGPU - <gpu>"` (`progress: 1`) | `ready` |
+
+Por eso `ModelLoadProgressIndicator` muestra el porcentaje **por fase** (con su etiqueta en
+español) en vez de un progreso global inventado con pesos fijos: mostrar un total combinado
+requeriría estimar cuánto pesa cada fase relativa a las otras, algo que el SDK no expone y que
+variaría según el modelo/dispositivo.
+
+`parseModelLoadProgress(reporte)` es una función PURA que deriva la fase por el *prefijo* del
+`text` del reporte (no por orden de llamada), con fallback a `starting` ante un texto no
+reconocido -- si una futura versión de WebLLM cambia la redacción, se pierde detalle de esa fase
+puntual pero la UI nunca rompe ni queda con datos obsoletos. El campo `modelTier`/
+`shaderF16Available` ya resueltos por `Detector_Compatibilidad` se usan además para mostrar qué
+variante de modelo concreta se cargó (`modelDescriptorForTier()`, `configuration.ts`) -- visible en
+el dispositivo real para el diagnóstico abierto de Android/iOS (ver nota más abajo).
+
 ### Validador de mensajes de entrada
 
 Función pura usada por la Interfaz_Chat antes de invocar al Motor_Inferencia (Requisitos 4.6, 4.8):
