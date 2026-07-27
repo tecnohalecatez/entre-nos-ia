@@ -364,6 +364,23 @@ Este plan traduce el diseño técnico (React + Vite + TypeScript, WebLLM, vite-p
     conocida (la del punto 30.4), informada mediante notificación cuando corresponde
     - _Requirements: 8.1_
 
+- [x] 31. Confirmado con el diagnóstico de la tarea 30: mismatch real de adaptador GPU en tablet
+  Android + loop silencioso de recarga en iPhone durante la carga del modelo
+  - El bloque "Detalles técnicos" (30.1) mostró en una tablet real el error de WebLLM "Unable to
+    find a compatible GPU"; en un iPhone la app seguía "cargando y recargándose" sin ningún mensaje
+  - [x] 31.1 `InferenceEngine.ts`/`experimental-navigator.d.ts`: `shimGpuPowerPreference()` envuelve
+    `navigator.gpu.requestAdapter` para descartar `powerPreference` antes de que WebLLM negocie su
+    propio adaptador internamente (siempre pide `"high-performance"`, sin parámetro público para
+    cambiarlo) -- en la tablet reportada, un `requestAdapter()` liso ya funciona (es lo que usa el
+    propio sondeo de la app), pero pedir `high-performance` explícitamente devuelve `null`
+    - _Requirements: 1.1_
+  - [x] 31.2 `sessionDiagnostics.ts`/`AppStateProvider.tsx`/`degradedMode.ts`/`App.tsx`: extender el
+    diagnóstico de sesión (30.6) para cubrir también la fase de carga del modelo, no sólo la de
+    generación, y cortar el loop si se detectan caídas consecutivas: la primera se reintenta sola
+    (con aviso), a partir de la segunda se activa Modo_Degradado con causa `repeated_load_crash` y
+    un botón "Reintentar" manual, en vez de seguir recargando en silencio para siempre
+    - _Requirements: 8.1_
+
 ## Notes
 
 - Las tareas marcadas con `*` son opcionales (pruebas) y pueden omitirse para un MVP más rápido; el modelo NO debe implementarlas salvo indicación explícita.

@@ -34,7 +34,23 @@ export type DegradedModeCause =
       detail?: string;
     }
   | { type: "model_download_failure" }
-  | { type: "no_connection_initial_load" };
+  | { type: "no_connection_initial_load" }
+  | {
+      /**
+       * The tab was killed (crashed, most likely an OOM kill by the OS/
+       * browser) at least `LOAD_CRASH_THRESHOLD` (`AppStateProvider.tsx`)
+       * times in a row while `InferenceEngine.initialize()` was in flight
+       * (`sessionDiagnostics.ts`'s `recordLoadCrash()`) -- observed on a
+       * phone as a silent, invisible "loads then reloads" loop with no
+       * error ever shown (a hard process crash never runs any of this
+       * app's `catch` blocks). Once detected, the boot sequence stops
+       * retrying on its own and surfaces this instead, with a manual retry
+       * (`App.tsx`) -- an infinite silent reload is strictly worse UX than
+       * a clear message asking the user to try again.
+       */
+      type: "repeated_load_crash";
+      attempts: number;
+    };
 
 /**
  * Human-readable label for each raw `missingCapabilities` token produced by
@@ -103,6 +119,8 @@ export function degradedModeMessage(cause: DegradedModeCause): string {
       return "La descarga del modelo no pudo completarse.";
     case "no_connection_initial_load":
       return "La carga inicial de la aplicación requiere conexión a internet. Conéctate e intenta de nuevo.";
+    case "repeated_load_crash":
+      return `El dispositivo se quedó sin memoria ${String(cause.attempts)} veces seguidas intentando cargar el modelo de IA. Es probable que este navegador o dispositivo no tenga memoria suficiente para ejecutarlo localmente.`;
   }
 }
 

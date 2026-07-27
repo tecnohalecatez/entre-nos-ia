@@ -343,6 +343,21 @@ estimado (no medido: no hay tokenizer disponible en esta capa) a partir de `vent
 antiguos primero. Siempre conserva al menos el último mensaje, aunque él solo exceda el presupuesto
 (`validateMessage.ts` ya limita un mensaje individual a 4000 caracteres).
 
+**Shim de `navigator.gpu.requestAdapter` (`shimGpuPowerPreference()`).** WebLLM negocia su propio
+adaptador GPU internamente (`detectGPUDevice()`, privado, no exportado por el paquete), pidiendo
+siempre `powerPreference: "high-performance"` — sin ningún parámetro público en `CreateMLCEngine`
+para cambiarlo. En una tablet Android real, esa negociación devolvió `null` ("Unable to find a
+compatible GPU") aunque el propio sondeo de esta app (`detect.ts`, `probeWebgpu()`, sin
+`powerPreference`) ya había obtenido un adaptador válido — comportamiento real de ciertos drivers de
+GPU integrada (Mali/Adreno de gama media) que no tienen una GPU "de alto rendimiento" distinta que
+ofrecer ante ese pedido puntual. Sin costura pública del SDK y sin infraestructura de patching de
+`node_modules` en este repo, `createDefaultMlcEngineFactory()` envuelve
+`navigator.gpu.requestAdapter` (idempotente, vía `WeakSet`) para descartar `powerPreference` antes
+de delegar — hace que la negociación interna de WebLLM sea consistente con la que el propio sondeo
+de la app ya validó. Trade-off aceptado: en un equipo con GPU integrada y discreta, podría elegirse
+un adaptador menos potente que el pedido explícitamente (inferencia más lenta) — preferible a un
+asistente roto por completo en los equipos donde `high-performance` devuelve `null`.
+
 `reducirGeneracion` modela exactamente los tres eventos terminales de 4.3 (completar), 4.5 (cancelar) y 8.2 (error), garantizando en todos los casos:
 - El `mensajeUsuario` original permanece presente y sin modificar.
 - En `error`, no queda texto parcial visible como mensaje del asistente (se descarta `textoParcial`).
@@ -685,10 +700,24 @@ en un bloque colapsado "Detalles técnicos" en la pantalla de Modo_Degradado (`A
 
 **Diagnóstico de recarga inesperada (`sessionDiagnostics.ts`).** Marcadores best-effort en
 `sessionStorage` que responden, en el arranque siguiente, una pregunta que tampoco era diagnosticable
-en el dispositivo: ¿el proceso del navegador se cayó a mitad de una generación (posible OOM), o hubo
-una recarga deliberada y conocida (la actualización del Service_Worker_App)? Si el marcador de
-"generando" sigue puesto al arrancar y no hay una razón de recarga registrada, se asume caída del
-proceso y se informa mediante una notificación.
+en el dispositivo: ¿el proceso del navegador se cayó a mitad de una generación o de una carga del
+modelo (posible OOM), o hubo una recarga deliberada y conocida (la actualización del
+Service_Worker_App)? Cubre ambas fases por separado (`markGenerationStarted/Finished` y
+`markLoadingStarted/Finished`, alrededor de `generar()` e `inicializar()` respectivamente); si el
+marcador de la fase correspondiente sigue puesto al arrancar y no hay una razón de recarga
+registrada, se asume caída del proceso.
+
+**Corte del loop silencioso de recarga durante la carga.** Reportado en un iPhone: la app "cargaba y
+se recargaba" indefinidamente, sin mostrar nunca ningún error — una caída dura del proceso durante
+`inicializar()` no pasa por ningún `catch` propio, así que no hay excepción que clasificar ni
+pantalla que mostrar, sólo una recarga silenciosa que se repite sin fin. `sessionDiagnostics.ts`
+lleva un contador de caídas **consecutivas** durante la carga (`recordLoadCrash()`/
+`resetLoadCrashCount()`, persistido en `sessionStorage` a través de las recargas). La primera caída
+consecutiva se reintenta sola (con una notificación de aviso); a partir de la segunda
+(`LOAD_CRASH_THRESHOLD` en `AppStateProvider.tsx`), el arranque deja de reintentar por su cuenta y
+activa Modo_Degradado con una causa nueva, `repeated_load_crash`, que incluye un botón "Reintentar"
+manual en la pantalla (`App.tsx`) — un mensaje claro y accionable es preferible a un loop invisible
+de recargas.
 
 ## Testing Strategy
 

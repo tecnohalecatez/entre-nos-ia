@@ -27,7 +27,7 @@ import { MODEL_ID_FULL, MODEL_ID_FULL_F32, MODEL_ID_COMPACT, MODEL_ID_COMPACT_F3
 import { ModelDownloadError } from "../model-download-manager/ensureModelAvailable";
 import type { ModelDownloadManager } from "../model-download-manager/ensureModelAvailable";
 import type { AppStateProviderProps } from "./AppStateProvider";
-import { markGenerationStarted } from "./sessionDiagnostics";
+import { markGenerationStarted, markLoadingStarted, recordLoadCrash } from "./sessionDiagnostics";
 
 beforeEach(() => {
   // fake-indexeddb doesn't isolate automatically between tests (same
@@ -577,6 +577,58 @@ describe("AppStateProvider - previous-session crash detection (sessionDiagnostic
       expect(screen.getByTestId("engine-ready").textContent).toBe("true");
     });
     expect(screen.queryAllByRole("alert")).toHaveLength(0);
+  });
+});
+
+describe("AppStateProvider - repeated load-crash breaker (a phone silently 'loading, then reloading' forever)", () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+  });
+
+  afterEach(() => {
+    window.sessionStorage.clear();
+  });
+
+  it("on a FIRST crash while loading: shows a heads-up notification and still retries normally (initialize() is called)", async () => {
+    markLoadingStarted(); // simulates the previous session dying mid-initialize(), no finish/reload-reason marker
+    const { inferenceEngine, initialize } = createFakeInferenceEngine();
+
+    renderWithProviders({ decideFn: decide, createInferenceEngine: () => inferenceEngine });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("engine-ready").textContent).toBe("true");
+    });
+    expect(initialize).toHaveBeenCalledTimes(1);
+    const alerts = screen.getAllByRole("alert");
+    expect(alerts.some((alert) => alert.textContent.includes("interrumpió"))).toBe(true);
+  });
+
+  it("on a SECOND consecutive crash while loading: gives up retrying (initialize() is NOT called) and activates 'repeated_load_crash' Degraded_Mode", async () => {
+    recordLoadCrash(); // count = 1, from an earlier crash already recorded
+    markLoadingStarted(); // this session ALSO crashed while loading
+    const { inferenceEngine, initialize } = createFakeInferenceEngine();
+
+    renderWithProviders({ decideFn: decide, createInferenceEngine: () => inferenceEngine });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("degraded-mode").textContent).not.toBe("null");
+    });
+    expect(screen.getByTestId("degraded-mode").textContent).toContain("se quedó sin memoria");
+    expect(initialize).not.toHaveBeenCalled();
+  });
+
+  it("resets the crash counter after a successful load, so a later isolated crash is treated as a first offense again", async () => {
+    markLoadingStarted(); // one crash (count will become 1 during this boot), then this boot succeeds
+    const { inferenceEngine } = createFakeInferenceEngine();
+
+    renderWithProviders({ decideFn: decide, createInferenceEngine: () => inferenceEngine });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("engine-ready").textContent).toBe("true");
+    });
+    // A successful load must have cleared the counter: the NEXT recorded
+    // crash starts back at 1, not 2 (which would have skipped retrying).
+    expect(recordLoadCrash()).toBe(1);
   });
 });
 

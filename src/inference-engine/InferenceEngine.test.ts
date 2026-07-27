@@ -3,12 +3,13 @@
 // simulated via a test `MlcEngineFactory`, avoiding dependence on WebGPU,
 // model weights or the real WebLLM SDK.
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Message } from "../types/models";
 import {
   EngineInitializationError,
   InferenceEngineWebLLM,
   classifyInitializationError,
+  shimGpuPowerPreference,
   type MlcEngineFactory,
   type MlcResponseChunk,
   type MlcEngine,
@@ -326,6 +327,58 @@ describe("classifyInitializationError", () => {
 
   it("classifies a non-Error value as other_cause", () => {
     expect(classifyInitializationError("fallo desconocido")).toBe("other_cause");
+  });
+});
+
+describe("shimGpuPowerPreference (Android tablet GPU-adapter mismatch mitigation)", () => {
+  afterEach(() => {
+    delete (navigator as { gpu?: unknown }).gpu;
+  });
+
+  it("strips powerPreference from requestAdapter() calls after being installed", async () => {
+    const originalRequestAdapter = vi.fn().mockResolvedValue({ features: { has: () => false } });
+    Object.defineProperty(navigator, "gpu", {
+      value: { requestAdapter: originalRequestAdapter },
+      configurable: true,
+    });
+
+    shimGpuPowerPreference();
+    await navigator.gpu?.requestAdapter({ powerPreference: "high-performance" });
+
+    expect(originalRequestAdapter).toHaveBeenCalledWith({});
+  });
+
+  it("still works for a call with no options at all (detect.ts's own probe, unaffected)", async () => {
+    const originalRequestAdapter = vi.fn().mockResolvedValue({ features: { has: () => false } });
+    Object.defineProperty(navigator, "gpu", {
+      value: { requestAdapter: originalRequestAdapter },
+      configurable: true,
+    });
+
+    shimGpuPowerPreference();
+    await navigator.gpu?.requestAdapter();
+
+    expect(originalRequestAdapter).toHaveBeenCalledWith({});
+  });
+
+  it("is idempotent: installing twice does not double-wrap requestAdapter", async () => {
+    const originalRequestAdapter = vi.fn().mockResolvedValue(null);
+    Object.defineProperty(navigator, "gpu", {
+      value: { requestAdapter: originalRequestAdapter },
+      configurable: true,
+    });
+
+    shimGpuPowerPreference();
+    shimGpuPowerPreference();
+    await navigator.gpu?.requestAdapter();
+
+    expect(originalRequestAdapter).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not throw when navigator.gpu is unavailable", () => {
+    expect(() => {
+      shimGpuPowerPreference();
+    }).not.toThrow();
   });
 });
 

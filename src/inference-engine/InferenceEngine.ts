@@ -438,6 +438,69 @@ export class InferenceEngineWebLLM implements InferenceEngine {
 }
 
 /**
+ * `navigator.gpu` objects already shimmed by `shimGpuPowerPreference()`,
+ * guarding against wrapping `requestAdapter` twice.
+ */
+const GPU_OBJECTS_WITH_SHIMMED_POWER_PREFERENCE = new WeakSet<object>();
+
+/**
+ * Installs a one-time shim over `navigator.gpu.requestAdapter` that drops
+ * `powerPreference` from every call before delegating to the real
+ * implementation.
+ *
+ * WHY: WebLLM's OWN internal GPU negotiation (`detectGPUDevice()`, private
+ * -- not part of `@mlc-ai/web-llm`'s public API, confirmed by reading
+ * `node_modules/@mlc-ai/web-llm/lib/index.js:4036-4046`, invoked from
+ * `MLCEngine.reload()` at line 12512) ALWAYS requests
+ * `navigator.gpu.requestAdapter({ powerPreference: "high-performance" })`,
+ * with no way to override it or hand WebLLM an already-obtained
+ * adapter/device from `CreateMLCEngine`'s public options (`MLCEngineConfig`
+ * has only `appConfig`, `initProgressCallback`, `logitProcessorRegistry`,
+ * `logLevel` -- see `config.d.ts`; `detectGPUDevice` itself isn't exported
+ * from the package at all).
+ *
+ * On some mobile GPU drivers (confirmed on an Android tablet reporting
+ * WebLLM's own "Unable to find a compatible GPU" error), requesting a
+ * specific `powerPreference` makes `requestAdapter()` resolve to `null`,
+ * even though a plain `requestAdapter()` with no options succeeds -- which
+ * is exactly what THIS APP's own compatibility probe uses (`detect.ts`'s
+ * `probeWebgpu()`). By the time this factory runs, `decide()` has already
+ * selected `"webgpu"` because that exact probe succeeded, so stripping
+ * `powerPreference` before WebLLM's internal call makes its negotiation
+ * consistent with the one already validated, instead of a second,
+ * stricter, unconfigurable one.
+ *
+ * TRADE-OFF, accepted deliberately: on a device with both an integrated and
+ * a discrete GPU, dropping the hint could make the browser pick a less
+ * powerful adapter than WebLLM intended -- slower inference. A working
+ * assistant on a previously-broken device is a strictly better outcome
+ * than a faster assistant on some devices at the cost of a totally broken
+ * one on others.
+ *
+ * Installed as a `navigator.gpu`-level shim, not a `node_modules` patch
+ * (see design.md): WebLLM never exposes a seam to influence this from its
+ * public API, and this repo has no `patch-package`/patching infrastructure
+ * to introduce just for this. Idempotent via
+ * `GPU_OBJECTS_WITH_SHIMMED_POWER_PREFERENCE`; no-op if `navigator.gpu`
+ * doesn't exist (shouldn't happen here -- this only runs once `decide()`
+ * has already selected an engine, which itself required WebGPU or WASM to
+ * be available).
+ */
+export function shimGpuPowerPreference(): void {
+  const gpu = navigator.gpu;
+  if (gpu === undefined || GPU_OBJECTS_WITH_SHIMMED_POWER_PREFERENCE.has(gpu)) {
+    return;
+  }
+  const originalRequestAdapter = gpu.requestAdapter.bind(gpu);
+  gpu.requestAdapter = (options) => {
+    const rest: GPURequestAdapterOptions = { ...options };
+    delete rest.powerPreference;
+    return originalRequestAdapter(rest);
+  };
+  GPU_OBJECTS_WITH_SHIMMED_POWER_PREFERENCE.add(gpu);
+}
+
+/**
  * Default factory of `MlcEngine`, backed by `CreateMLCEngine` from
  * `@mlc-ai/web-llm`.
  *
@@ -452,6 +515,7 @@ export function createDefaultMlcEngineFactory(
   createMLCEngine: typeof CreateMLCEngineType,
 ): MlcEngineFactory {
   return async (modelId, _engine, options) => {
+    shimGpuPowerPreference();
     const engineConfig = options?.onProgress !== undefined ? { initProgressCallback: options.onProgress } : {};
     const realEngine = await createMLCEngine(modelId, engineConfig, options?.chatOptions);
     return {
